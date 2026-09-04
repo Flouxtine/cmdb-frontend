@@ -17,10 +17,11 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with: { python-version: "3.11" }
-      - name: 语法检查
+      - name: 语法与测试
         run: |
           pip install -r requirements.txt -q
           python -m py_compile app/*.py app/providers/*.py
+          python -m pytest tests/ -q
           echo "OK"
 
   docker:

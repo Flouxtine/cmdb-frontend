@@ -160,20 +160,25 @@ RESOURCE_TYPES = {"ecs": "云服务器", "disk": "云盘", "security_group": "�
 @router.get("/resources")
 def list_resources(credential_id: str = "", resource_type: str = "", keyword: str = "",
                    page: int = 1, page_size: int = 30):
-    sql = ("SELECT r.*, c.name AS credential_name, c.provider FROM resources r "
-           "LEFT JOIN credentials c ON c.id=r.credential_id WHERE 1=1")
-    params = []
+    page = max(1, page)
+    page_size = min(max(1, page_size), 200)
+    where, params = ["1=1"], []
     if credential_id:
-        sql += " AND r.credential_id=?"; params.append(credential_id)
+        where.append("r.credential_id=?"); params.append(credential_id)
     if resource_type:
-        sql += " AND r.resource_type=?"; params.append(resource_type)
+        where.append("r.resource_type=?"); params.append(resource_type)
     if keyword:
-        sql += " AND (r.name LIKE ? OR r.resource_id LIKE ?)"; params += [f"%{keyword}%", f"%{keyword}%"]
-    sql += " ORDER BY r.resource_type, r.name"
-    rows = db.fetch_all(sql, params)
-    total = len(rows)
-    start = (page - 1) * page_size
-    items = [_resource_row(r) for r in rows[start:start + page_size]]
+        where.append("(r.name LIKE ? OR r.resource_id LIKE ?)"); params += [f"%{keyword}%", f"%{keyword}%"]
+    cond = " AND ".join(where)
+
+    with db.get_conn() as conn:
+        total = conn.execute(f"SELECT COUNT(*) FROM resources r WHERE {cond}", params).fetchone()[0]
+        rows = conn.execute(
+            f"SELECT r.*, c.name AS credential_name, c.provider FROM resources r "
+            f"LEFT JOIN credentials c ON c.id=r.credential_id WHERE {cond} "
+            f"ORDER BY r.resource_type, r.name LIMIT ? OFFSET ?",
+            params + [page_size, (page - 1) * page_size]).fetchall()
+    items = [_resource_row(r) for r in rows]
     return {"total": total, "page": page, "items": items, "resource_types": RESOURCE_TYPES}
 
 
