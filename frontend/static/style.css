@@ -63,3 +63,8 @@ input:focus,select:focus{border-color:#409eff}
 .form-row label{display:block;color:#6b7488;font-size:12px;margin-bottom:5px}
 .form-row input,.form-row select{width:100%}
 .svc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(330px,1fr));gap:14px}
+.lvl{display:inline-block;padding:1px 9px;border-radius:4px;font-size:12px;color:#fff}
+.lvl.high{background:#f56c6c}.lvl.medium{background:#e6a23c}.lvl.low{background:#909399}
+.src{display:inline-block;padding:1px 7px;border-radius:3px;font-size:11px;background:#eef0f6;color:#4a5568;border:1px solid #e0e4ec}
+.rel-tag{display:inline-block;padding:1px 8px;border-radius:4px;font-size:12px;background:#f3e8ff;color:#7c3aed}
+.st-open{color:#f56c6c;font-weight:600}.st-resolved{color:#67c23a}.st-expired{color:#a3abb8}

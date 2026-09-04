@@ -31,7 +31,7 @@ scripts/       report-release.sh 发布上报
 ## Roadmap
 
 - ✅ **M1**（v0.1.0）账号 + 云资源 CMDB + 业务服务关联（归属可查）
-- ⬜ **M2**（v0.2.0）告警接收与归一化（Alertmanager / 通用 Webhook）
+- ✅ **M2**（v0.2.0）告警接收与归一化（Alertmanager / 通用 Webhook）
 - ⬜ **M3**（v0.3.0）变更关联 + AI 排障分析
 - ⬜ **M4**（v1.0.0）GitHub 发布打磨
 

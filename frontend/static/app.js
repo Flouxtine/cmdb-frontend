@@ -50,9 +50,9 @@ function switchView(name) {
   state.view = name;
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
-  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务" };
+  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务", alerts: "告警分析" };
   $("#page-title").textContent = T[name];
-  ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices })[name]();
+  ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices, alerts: loadAlerts })[name]();
 }
 document.querySelectorAll(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
 
@@ -65,7 +65,7 @@ async function loadOverview() {
     const stats = el("div", "stat-grid");
     stats.append(
       mkStat(d.credential_count, "云账号", "ok"), mkStat(d.resource_count, "云资源", "ac"),
-      mkStat(d.cmdb_item_count, "业务服务", ""), mkStat(d.unlinked_resource_count, "未关联资源", d.unlinked_resource_count ? "hl" : ""));
+      mkStat(d.cmdb_item_count, "业务服务", ""), mkStat(d.open_alert_count ?? 0, "未处理告警", (d.open_alert_count || 0) > 0 ? "hl" : ""));
     v.appendChild(stats);
 
     const card = el("div", "card");
@@ -331,6 +331,64 @@ async function showSvcDrawer(iid) {
     resSec.appendChild(t);
   } else resSec.appendChild(el("div", "muted", "尚未关联资源 —— 在「云资源 CMDB」的资源归属抽屉里执行绑定"));
   body.appendChild(sec("关联云资源", resSec));
+}
+
+/* ---------------- 告警分析（M2）---------------- */
+const alertFilter = { level: "", status: "open", source: "" };
+const LEVEL_LABEL = { high: "高危", medium: "中危", low: "低危" };
+const SRC_LABEL = { alertmanager: "Alertmanager", custom: "通用Webhook", internal: "内部规则" };
+
+async function loadAlerts() {
+  const v = $("#view-alerts"); v.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    const params = new URLSearchParams(Object.entries(alertFilter).filter(([, x]) => x));
+    const alerts = await get(`/api/alerts?${params}`);
+    v.innerHTML = "";
+    const demoBar = el("div", "tip", "🎬 演示：点「模拟外部告警」= 通用 Webhook 推一条告警（resource_ref 匹配到 CMDB 资源）；也可复制 curl 直接调 <b>POST /api/webhooks/generic</b> 或 Alertmanager 标准格式 <b>POST /api/webhooks/alertmanager</b>（配了 WEBHOOK_TOKEN 需带 X-Ops-Scope-Token）。");
+    const toolbar = el("div", "toolbar");
+    const simBtn = el("button", "btn danger", "🎬 模拟外部告警");
+    simBtn.onclick = () => post("/api/demo/alert").then((r) => { toast(r.action === "created" ? "已产生告警" : r.action === "deduped" ? "同 key 告警已去重" : "已入库"); loadAlerts(); loadOverview(); }).catch((e) => toast(e.message, true));
+    const selLevel = el("select");
+    [["", "全部级别"], ["high", "高危"], ["medium", "中危"], ["low", "低危"]].forEach(([k, l]) => selLevel.appendChild(new Option(l, k)));
+    selLevel.value = alertFilter.level;
+    selLevel.onchange = () => { alertFilter.level = selLevel.value; loadAlerts(); };
+    const selStatus = el("select");
+    [["", "全部状态"], ["open", "未解决"], ["resolved", "已解决"], ["expired", "已过期"]].forEach(([k, l]) => selStatus.appendChild(new Option(l, k)));
+    selStatus.value = alertFilter.status;
+    selStatus.onchange = () => { alertFilter.status = selStatus.value; loadAlerts(); };
+    const selSrc = el("select");
+    [["", "全部来源"], ["alertmanager", "Alertmanager"], ["custom", "通用Webhook"], ["internal", "内部规则"]].forEach(([k, l]) => selSrc.appendChild(new Option(l, k)));
+    selSrc.value = alertFilter.source;
+    selSrc.onchange = () => { alertFilter.source = selSrc.value; loadAlerts(); };
+    toolbar.append(simBtn, selLevel, selStatus, selSrc);
+    v.append(demoBar, toolbar);
+
+    const t = el("table");
+    t.appendChild(el("thead", "", "<tr><th>级别</th><th>告警</th><th>来源</th><th>资源 / 业务</th><th>关联发布</th><th>状态</th><th>最近时间</th><th>操作</th></tr>"));
+    const tb = el("tbody");
+    if (!alerts.length) tb.innerHTML = `<tr><td colspan="8" class="empty">暂无告警 —— 点「模拟外部告警」体验接收流程</td></tr>`;
+    alerts.forEach((a) => {
+      const tr = el("tr");
+      const rel = a.related_deployment_id ? `<span class="rel-tag">⚠️ ${esc(a.deploy_version || "本次发布")}</span>` : '<span class="muted">-</span>';
+      const stCls = { open: "st-open", resolved: "st-resolved", expired: "st-expired" }[a.status] || "";
+      const stLabel = { open: "未解决", resolved: "已解决", expired: "已过期" }[a.status] || a.status;
+      tr.innerHTML = `<td><span class="lvl ${a.level}">${LEVEL_LABEL[a.level] || a.level}</span></td>
+        <td><b>${esc(a.title)}</b><div class="muted">${esc(a.detail || "")}</div></td>
+        <td><span class="src">${esc(SRC_LABEL[a.source] || a.source)}</span></td>
+        <td>${esc(a.item_name || a.resource_ref || "-")}${a.credential_name ? `<div class="muted">账号:${esc(a.credential_name)}</div>` : ""}</td>
+        <td>${rel}</td><td class="${stCls}">${stLabel}</td><td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;
+      const act = el("td", "");
+      if (a.status === "open") {
+        const rb = el("button", "btn sm", "解决");
+        rb.onclick = () => post(`/api/alerts/${a.id}/resolve`).then(() => { toast("已解决"); loadAlerts(); loadOverview(); });
+        act.appendChild(rb);
+      }
+      tr.appendChild(act);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    v.appendChild(t);
+  } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 
 /* ---------------- 通用 ---------------- */

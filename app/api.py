@@ -1,13 +1,14 @@
-"""M1 API：云账号管理 + 云资源归属 CMDB + 业务服务关联 + 发布上报 + 概览"""
+"""M1-M2 API：云账号 / 云资源归属 / 业务服务 / 发布上报 / 告警接收与分析 / 概览"""
 from __future__ import annotations
 
 import json
 import uuid
 
-from fastapi import APIRouter, HTTPException
+from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
+from . import alerts, config
 from . import database as db
 from . import security
 from .providers import registry, get_provider
@@ -44,6 +45,26 @@ class DeploymentIn(BaseModel):
     author: str = ""
     source: str = "manual"
     rollback: bool = False
+
+
+class GenericWebhookIn(BaseModel):
+    title: str = Field(..., min_length=1)
+    level: str = "medium"
+    detail: str = ""
+    resource_ref: str = ""
+    status: str = "open"
+    source: str = "custom"
+    dedup_key: Optional[str] = None
+
+
+class RuleIn(BaseModel):
+    enabled: bool
+
+
+def _check_webhook_token(request: Request):
+    """Webhook 鉴权：配置了 WEBHOOK_TOKEN 则要求 X-Ops-Scope-Token 匹配"""
+    if config.WEBHOOK_TOKEN and request.headers.get("X-Ops-Scope-Token") != config.WEBHOOK_TOKEN:
+        raise HTTPException(401, "无效的 Webhook 令牌")
 
 
 def _decrypted(c):
@@ -282,6 +303,90 @@ def create_deployment(body: DeploymentIn):
     return {"ok": True}
 
 
+# ---------------- 告警接收（M2）----------------
+@router.post("/webhooks/alertmanager")
+async def webhook_alertmanager(request: Request, body: dict = Body(...)):
+    """Prometheus Alertmanager 标准 webhook 格式接入"""
+    _check_webhook_token(request)
+    results = []
+    for a in body.get("alerts", []):
+        labels = a.get("labels") or {}
+        annotations = a.get("annotations") or {}
+        status = "resolved" if a.get("status") == "resolved" else "open"
+        key = alerts.dedup_key("alertmanager", labels.get("alertname"), labels.get("instance") or labels.get("resource_id"))
+        results.append(alerts.upsert_alert({
+            "source": "alertmanager",
+            "level": labels.get("severity", "warning"),
+            "title": annotations.get("summary") or labels.get("alertname") or "Alertmanager 告警",
+            "detail": annotations.get("description") or "",
+            "resource_ref": labels.get("resource_id") or labels.get("instance") or "",
+            "status": status,
+            "dedup_key": key,
+        }))
+    return {"received": len(body.get("alerts", [])), "results": results}
+
+
+@router.post("/webhooks/generic")
+async def webhook_generic(request: Request, body: GenericWebhookIn):
+    """通用 Webhook：任意系统 POST {title, level, resource_ref, detail, status, source}"""
+    _check_webhook_token(request)
+    return alerts.upsert_alert(body.model_dump())
+
+
+@router.get("/alerts")
+def list_alerts(level: str = "", status: str = "", source: str = "", service: str = ""):
+    sql = ("SELECT a.*, d.version AS deploy_version, c.name AS credential_name, i.name AS item_name "
+           "FROM alert_events a "
+           "LEFT JOIN deployments d ON d.id=a.related_deployment_id "
+           "LEFT JOIN cmdb_items i ON i.id=a.item_id "
+           "LEFT JOIN resources r ON r.id=a.resource_id "
+           "LEFT JOIN credentials c ON c.id=r.credential_id WHERE 1=1")
+    params = []
+    if level:
+        sql += " AND a.level=?"; params.append(level)
+    if status:
+        sql += " AND a.status=?"; params.append(status)
+    if source:
+        sql += " AND a.source=?"; params.append(source)
+    if service:
+        sql += " AND (i.name=? OR r.name=?)"; params += [service, service]
+    sql += (" ORDER BY CASE a.level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, "
+            "a.last_at DESC LIMIT 200")
+    return db.fetch_all(sql, params)
+
+
+@router.post("/alerts/{aid}/resolve")
+def resolve_alert(aid: int):
+    db.execute("UPDATE alert_events SET status='resolved', resolved_at=datetime('now','localtime') WHERE id=? AND status='open'", (aid,))
+    return {"ok": True}
+
+
+@router.get("/rules")
+def list_rules():
+    return db.fetch_all("SELECT * FROM rules ORDER BY level DESC, rule_key")
+
+
+@router.patch("/rules/{rule_key}")
+def update_rule(rule_key: str, body: RuleIn):
+    if not db.fetch_one("SELECT rule_key FROM rules WHERE rule_key=?", (rule_key,)):
+        raise HTTPException(404, "规则不存在")
+    db.execute("UPDATE rules SET enabled=? WHERE rule_key=?", (1 if body.enabled else 0, rule_key))
+    return {"ok": True}
+
+
+@router.post("/demo/alert")
+def demo_alert():
+    """演示：模拟外部系统推入一条告警（走通用 webhook 同款流水线）"""
+    return alerts.upsert_alert({
+        "source": "custom",
+        "level": "warning",
+        "title": "CPU 使用率超阈值",
+        "detail": "演示告警：demo-api 实例 CPU 使用率 92% 持续 10 分钟（模拟外部监控推送）",
+        "resource_ref": "i-demo-001",
+        "status": "open",
+    })
+
+
 # ---------------- 概览 ----------------
 @router.get("/overview")
 def overview():
@@ -289,15 +394,19 @@ def overview():
         cred_total = conn.execute("SELECT COUNT(*) FROM credentials").fetchone()[0]
         res_total = conn.execute("SELECT COUNT(*) FROM resources").fetchone()[0]
         item_total = conn.execute("SELECT COUNT(*) FROM cmdb_items").fetchone()[0]
+        alert_open = conn.execute("SELECT COUNT(*) FROM alert_events WHERE status='open'").fetchone()[0]
         by_type = [dict(r) for r in conn.execute(
             "SELECT resource_type, COUNT(*) n FROM resources GROUP BY resource_type")]
         by_account = [dict(r) for r in conn.execute(
             "SELECT r.credential_id, c.name, c.provider, COUNT(*) n FROM resources r LEFT JOIN credentials c ON c.id=r.credential_id GROUP BY r.credential_id")]
         by_project = [dict(r) for r in conn.execute(
             "SELECT project, COUNT(*) n FROM cmdb_items GROUP BY project")]
+        alert_by_level = [dict(r) for r in conn.execute(
+            "SELECT level, COUNT(*) n FROM alert_events WHERE status='open' GROUP BY level")]
         unlinked = conn.execute(
             "SELECT COUNT(*) FROM resources r WHERE NOT EXISTS (SELECT 1 FROM cmdb_item_resource ir WHERE ir.resource_id=r.id)").fetchone()[0]
     return {"credential_count": cred_total, "resource_count": res_total, "cmdb_item_count": item_total,
+            "open_alert_count": alert_open, "alert_by_level": alert_by_level,
             "resource_by_type": by_type, "resource_by_account": by_account,
             "cmdb_by_project": by_project, "unlinked_resource_count": unlinked,
             "resource_types": RESOURCE_TYPES}

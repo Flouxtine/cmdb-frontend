@@ -90,6 +90,7 @@ def init_db():
                 title TEXT NOT NULL,
                 detail TEXT DEFAULT '',
                 resource_ref TEXT,
+                resource_id INTEGER,
                 item_id TEXT,
                 related_deployment_id INTEGER,
                 status TEXT DEFAULT 'open',
@@ -105,6 +106,10 @@ def init_db():
             );
             """
         )
+        # 存量库轻量迁移：alert_events 补 resource_id 列
+        cols = [r[1] for r in conn.execute("PRAGMA table_info(alert_events)").fetchall()]
+        if "resource_id" not in cols:
+            conn.execute("ALTER TABLE alert_events ADD COLUMN resource_id INTEGER")
 
 
 def fetch_all(sql, params=()):

@@ -22,7 +22,7 @@ def client():
 def clean_db():
     from app import database
     with database.get_conn() as conn:
-        for t in ["cmdb_item_resource", "cmdb_items", "resources", "deployments", "credentials"]:
+        for t in ["cmdb_item_resource", "cmdb_items", "resources", "deployments", "credentials", "alert_events"]:
             conn.execute(f"DELETE FROM {t}")
     yield
 
