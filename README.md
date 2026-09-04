@@ -2,6 +2,9 @@
 
 > GitHub 仓库：[Flouxtine/cmdb-frontend](https://github.com/Flouxtine/cmdb-frontend)
 
+![CI](https://github.com/Flouxtine/cmdb-frontend/actions/workflows/ci.yml/badge.svg)
+![License](https://img.shields.io/badge/license-Apache%202.0-blue)
+
 DevOps 集成式 AIOps 平台：**云账号 → 云资源 CMDB（归属可查）→ 告警接收分析 → 变更关联 → AI 排障**。
 自用友好 · GitHub 开源 · `docker compose up` 即用。
 

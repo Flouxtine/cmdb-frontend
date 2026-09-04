@@ -18,7 +18,7 @@ FRONTEND_DIR = Path(__file__).resolve().parent.parent / "frontend"
 
 def create_app():
     database.init_db()
-    app = FastAPI(title="OpsScope", version="0.1.0")
+    app = FastAPI(title="OpsScope", version=config.VERSION)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.CORS_ORIGINS,

@@ -8,6 +8,8 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 DB_PATH = DATA_DIR / "opsscope.db"
 SECRET_FILE = DATA_DIR / ".secret"
 
+VERSION = "1.0.0"
+
 SERVICE_NAME = os.environ.get("SERVICE_NAME", "opsscope")
 LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1")
