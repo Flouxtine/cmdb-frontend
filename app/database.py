@@ -106,6 +106,15 @@ def init_db():
             );
             """
         )
+        # 种子规则（幂等）
+        conn.executemany(
+            "INSERT OR IGNORE INTO rules(rule_key, name, level) VALUES(?,?,?)",
+            [
+                ("error_rate_spike", "错误率突增", "high"),
+                ("latency_high", "平均延迟超标", "medium"),
+                ("health_missing", "服务心跳中断", "high"),
+            ],
+        )
         # 存量库轻量迁移：alert_events 补 resource_id 列
         cols = [r[1] for r in conn.execute("PRAGMA table_info(alert_events)").fetchall()]
         if "resource_id" not in cols:

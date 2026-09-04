@@ -383,12 +383,37 @@ async function loadAlerts() {
         rb.onclick = () => post(`/api/alerts/${a.id}/resolve`).then(() => { toast("已解决"); loadAlerts(); loadOverview(); });
         act.appendChild(rb);
       }
+      const ab = el("button", "btn sm primary", "🤖 AI 分析");
+      ab.onclick = () => showAiDrawer(a);
+      act.appendChild(ab);
       tr.appendChild(act);
       tb.appendChild(tr);
     });
     t.appendChild(tb);
     v.appendChild(t);
   } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+}
+
+/* AI 排障分析抽屉（M3）：展示 LLM/规则回退分析 + 排障上下文 */
+async function showAiDrawer(a) {
+  const dlg = openDrawer(`🤖 AI 排障 · ${esc(a.title)}`, el("div"));
+  const body = dlg.body;
+  body.appendChild(el("div", "muted", "分析中（未配置 LLM key 时使用内置规则解释）..."));
+  try {
+    const r = await post("/api/ai/explain", { alert_id: a.id });
+    body.innerHTML = "";
+    const engine = r.engine === "llm" ? `LLM（${esc(r.model || "")}）` : r.engine === "llm-fallback" ? "LLM失败→规则回退" : "内置规则解释";
+    body.appendChild(sec("分析引擎", el("span", "src", esc(engine))));
+    const box = el("div", "", "");
+    r.analysis.split("\n").forEach((line) => {
+      if (/^\d\)/.test(line.trim())) box.appendChild(el("div", "", `<b>${esc(line)}</b>`));
+      else if (line.trim()) box.appendChild(el("div", "", esc(line)));
+    });
+    body.appendChild(sec("分析结果", box));
+    body.appendChild(sec("排障上下文", el("div", "detail-json", esc(r.context))));
+  } catch (e) {
+    body.innerHTML = `<div class="empty">分析失败：${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------------- 通用 ---------------- */

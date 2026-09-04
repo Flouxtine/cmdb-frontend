@@ -112,6 +112,6 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 | 阶段 | 内容 | 验收标准 | tag |
 |---|---|---|---|
 | M1 ✅ | 账号+资源归属+业务服务关联 | 任一资源能查到所属账号与信息 | v0.1.0 |
-| M2 | 告警接收归一化 | curl 模拟 Alertmanager/通用 webhook → 正确入库、归一到资源、去重 | v0.2.0 |
-| M3 | 变更关联+AI | 模拟故障发布→告警→关联发布→AI 建议全链路 | v0.3.0 |
+| M2 ✅ | 告警接收归一化 | curl 模拟 Alertmanager/通用 webhook → 正确入库、归一到资源、去重 | v0.2.0 |
+| M3 ✅ | 变更关联+AI | 模拟故障发布→告警→关联发布→AI 建议全链路 | v0.3.0 |
 | M4 | 发布打磨 | tag 即出镜像，按 DEPLOY.md 可复现部署 | v1.0.0 |

@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from . import alerts, config
+from . import alerts, ai, config
 from . import database as db
 from . import security
 from .providers import registry, get_provider
@@ -59,6 +59,10 @@ class GenericWebhookIn(BaseModel):
 
 class RuleIn(BaseModel):
     enabled: bool
+
+
+class AiExplainIn(BaseModel):
+    alert_id: int
 
 
 def _check_webhook_token(request: Request):
@@ -335,6 +339,8 @@ async def webhook_generic(request: Request, body: GenericWebhookIn):
 
 @router.get("/alerts")
 def list_alerts(level: str = "", status: str = "", source: str = "", service: str = ""):
+    # 过期扫描：超时未恢复的 open 告警 → expired（状态机完整性）
+    alerts.expire_stale_events()
     sql = ("SELECT a.*, d.version AS deploy_version, c.name AS credential_name, i.name AS item_name "
            "FROM alert_events a "
            "LEFT JOIN deployments d ON d.id=a.related_deployment_id "
@@ -385,6 +391,15 @@ def demo_alert():
         "resource_ref": "i-demo-001",
         "status": "open",
     })
+
+
+# ---------------- AI 排障分析（M3）----------------
+@router.post("/ai/explain")
+async def ai_explain(body: AiExplainIn):
+    try:
+        return await ai.explain_alert(body.alert_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 # ---------------- 概览 ----------------
