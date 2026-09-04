@@ -4,10 +4,20 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
+  release:
+    types: [published]
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: echo "check ok"
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - run: |
+          pip install -r requirements.txt -q
+          python -m pytest tests/ -q
