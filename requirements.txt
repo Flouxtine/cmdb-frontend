@@ -1,0 +1,8 @@
+fastapi>=0.110
+uvicorn[standard]>=0.29
+cryptography>=42
+aliyun-python-sdk-core>=2.15
+aliyun-python-sdk-ecs>=4.24
+aliyun-python-sdk-vpc>=3.0
+oss2>=2.18
+httpx>=0.27

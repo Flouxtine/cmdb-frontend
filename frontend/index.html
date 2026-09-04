@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OpsScope · 观云台</title>
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar">
+    <div class="brand">OpsScope <span class="brand-cn">观云台</span></div>
+    <nav>
+      <a class="nav-item active" data-view="overview">📊 概览</a>
+      <a class="nav-item" data-view="credentials">🔑 云账号</a>
+      <a class="nav-item" data-view="resources">🗂️ 云资源 CMDB</a>
+      <a class="nav-item" data-view="services">🧩 业务服务</a>
+    </nav>
+    <div class="sidebar-foot">M1 · 账号与资源归属</div>
+  </aside>
+  <main class="content">
+    <header class="topbar"><h1 id="page-title">概览</h1>
+      <div class="topbar-actions"><button class="btn" onclick="switchView(state.view)">🔄 刷新</button></div>
+    </header>
+    <section id="view-overview" class="view active"></section>
+    <section id="view-credentials" class="view"></section>
+    <section id="view-resources" class="view"></section>
+    <section id="view-services" class="view"></section>
+  </main>
+</div>
+<div id="drawer-root"></div>
+<div id="modal-root"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>
