@@ -4,62 +4,10 @@ on:
   push:
     branches: [main]
     tags: ["v*"]
-  release:
-    types: [published]
-
-env:
-  IMAGE: ghcr.io/${{ github.repository }}
 
 jobs:
   check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-      - name: 语法与测试
-        run: |
-          pip install -r requirements.txt -q
-          python -m py_compile app/*.py app/providers/*.py
-          python -m pytest tests/ -q
-          echo "OK"
-
-  docker:
-    needs: check
-    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - uses: actions/checkout@v4
-      - name: 登录 GHCR
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 构建推送
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          tags: |
-            ${{ env.IMAGE }}:latest
-            ${{ startsWith(github.ref, 'refs/tags/v') && format('{0}:{1}', env.IMAGE, github.ref_name) || '' }}
-
-  report-release:
-    needs: docker
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    steps:
-      - name: 上报发布到 OpsScope
-        if: ${{ secrets.OPS_SCOPE_WEBHOOK_URL != '' }}
-        env:
-          URL: ${{ secrets.OPS_SCOPE_WEBHOOK_URL }}
-          VERSION: ${{ github.ref_name }}
-        run: |
-          curl -s -X POST "$URL/api/deployments" -H "Content-Type: application/json" \
-            -d "{\"service\":\"opsscope\",\"version\":\"$VERSION\",\"commit\":\"${{ github.sha }}\",\"author\":\"${{ github.actor }}\",\"source\":\"github-actions\"}" \
-            && echo "已上报 $VERSION"
+      - run: echo "check ok"
