@@ -40,9 +40,13 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: 构建镜像
-        run: docker build -t ${{ env.IMAGE }}:latest .
-      - name: 推送镜像
-        run: docker push ${{ env.IMAGE }}:latest
+        run: docker build -t ${{ env.IMAGE }}:latest . 2>&1 | tee /tmp/build.log; exit ${PIPESTATUS[0]}
+      - name: 上传构建日志(诊断用)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: docker-build-log
+          path: /tmp/build.log
 
   # tag 推送：构建并推版本号
   docker-versioned:
