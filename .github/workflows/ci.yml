@@ -23,7 +23,7 @@ jobs:
           python -m pytest tests/ -q
           echo "OK"
 
-  # 分支推送：构建并推 latest
+  # 分支推送：构建并推 latest（显式 docker 命令，错误可直接看到）
   docker:
     needs: check
     if: github.ref == 'refs/heads/main'
@@ -39,13 +39,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 构建推送 latest
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          provenance: false
-          tags: ${{ env.IMAGE }}:latest
+      - name: 构建镜像
+        run: docker build -t ${{ env.IMAGE }}:latest .
+      - name: 推送镜像
+        run: docker push ${{ env.IMAGE }}:latest
 
   # tag 推送：构建并推版本号
   docker-versioned:
@@ -63,10 +60,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: 构建推送版本号
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          push: true
-          provenance: false
-          tags: ${{ env.IMAGE }}:latest,${{ env.IMAGE }}:${{ github.ref_name }}
+      - name: 构建镜像
+        run: docker build -t ${{ env.IMAGE }}:latest -t ${{ env.IMAGE }}:${{ github.ref_name }} .
+      - name: 推送镜像
+        run: |
+          docker push ${{ env.IMAGE }}:latest
+          docker push ${{ env.IMAGE }}:${{ github.ref_name }}
