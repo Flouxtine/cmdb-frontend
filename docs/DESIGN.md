@@ -86,6 +86,18 @@ rules        rule_key,name,level,enabled
 - AI：`POST /api/ai/explain {alert_id}` 组装上下文（指标采样+最近发布+资源/账号归属）→ OpenAI 兼容 chat API → 输出"最可能原因 + 分步处置"；未配 key 自动回退规则启发式。可解释/零样本/可回退。
 - Prompt 骨架：`你是一名资深 SRE… 结合"最近发布"与指标拐点判断因果…`（temperature=0.2）。
 
+## 8.1 内部规则检测引擎（M3 补充）
+
+- `metric_samples` 表 + 后台采样线程（间隔 `SAMPLE_INTERVAL`，默认 10s）
+- 规则：错误率突增（>5%）、延迟超标（>500ms），命中 → `source=internal` 告警，去重 + 恢复自动收敛
+- 演示：`POST /api/simulate/fault`（模拟故障发布，指标恶化触发告警）/ `POST /api/simulate/recover`
+- 数据：`GET /api/health/series?service=&metric=` 时间序列，供前端绘图/外部对接
+
+## 8.2 告警通知（M3 补充）
+
+- `.env` 配 `ALERT_WEBHOOK_URL`（钉钉/飞书/自定义），告警触发/恢复时后台线程 POST JSON，不阻塞主流程
+- 未配置则静默跳过
+
 ## 9. M4 — GitHub 发布
 
 `.github/workflows/ci.yml`：push main / tag `v*` → 语法检查 → 构建推送 GHCR（`latest`+`:tag`）→（可选）上报发布。配套 Dockerfile / docker-compose.yml / scripts/report-release.sh / Apache-2.0 LICENSE。

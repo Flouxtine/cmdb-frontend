@@ -104,6 +104,14 @@ def init_db():
                 level TEXT DEFAULT 'medium',
                 enabled INTEGER DEFAULT 1
             );
+            CREATE TABLE IF NOT EXISTS metric_samples (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                service TEXT NOT NULL,
+                metric TEXT NOT NULL,
+                value REAL NOT NULL,
+                ts TEXT DEFAULT (datetime('now','localtime'))
+            );
+            CREATE INDEX IF NOT EXISTS idx_metric_samples ON metric_samples(service, metric, ts);
             """
         )
         # 种子规则（幂等）

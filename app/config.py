@@ -19,3 +19,8 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()] or ["*"]
 # Webhook 鉴权令牌（M2 告警接收使用；留空则不校验）
 WEBHOOK_TOKEN = os.environ.get("WEBHOOK_TOKEN", "")
+
+# 告警通知 Webhook（钉钉/飞书/自定义，POST JSON）；留空不推送
+ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "")
+# 采样与内部规则检测间隔（秒）
+SAMPLE_INTERVAL = float(os.environ.get("SAMPLE_INTERVAL", "10"))

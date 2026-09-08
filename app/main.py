@@ -8,6 +8,7 @@ from fastapi.staticfiles import StaticFiles
 from pathlib import Path
 
 from . import config, database
+from . import metrics
 from .api import router
 
 logger = logging.getLogger("opsscope")
@@ -39,6 +40,7 @@ def create_app():
     def index():
         return FileResponse(str(FRONTEND_DIR / "index.html"))
 
+    metrics.start()
     return app
 
 

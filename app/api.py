@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from . import alerts, ai, config
 from . import database as db
-from . import security
+from . import metrics, security
 from .providers import registry, get_provider
 
 router = APIRouter(prefix="/api")
@@ -400,6 +400,29 @@ async def ai_explain(body: AiExplainIn):
         return await ai.explain_alert(body.alert_id)
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+# ---------------- 内部规则检测 / 演示故障剧本 ----------------
+@router.post("/simulate/fault")
+def simulate_fault():
+    """模拟故障：demo-api 错误率/延迟升高 → 内部规则触发告警"""
+    summary = metrics.simulate_fault()
+    return {"ok": True, "message": "已模拟故障，内部规则即将产生告警", **summary}
+
+
+@router.post("/simulate/recover")
+def simulate_recover():
+    """恢复：demo-api 指标回落 → 内部规则告警自动收敛"""
+    summary = metrics.simulate_recover()
+    return {"ok": True, "message": "已恢复，相关内部告警将收敛", **summary}
+
+
+@router.get("/health/series")
+def health_series(service: str, metric: str = "error_rate", limit: int = 120):
+    """服务指标时间序列（内部规则检测数据，供前端绘图）"""
+    return db.fetch_all(
+        "SELECT value, ts FROM metric_samples WHERE service=? AND metric=? ORDER BY id DESC LIMIT ?",
+        (service, metric, min(limit, 500)))[::-1]
 
 
 # ---------------- 概览 ----------------

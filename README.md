@@ -36,7 +36,9 @@ scripts/       report-release.sh 发布上报
 - ✅ **M1**（v0.1.0）账号 + 云资源 CMDB + 业务服务关联（归属可查）
 - ✅ **M2**（v0.2.0）告警接收与归一化（Alertmanager / 通用 Webhook）
 - ✅ **M3**（v0.3.0）变更关联 + AI 排障分析
-- ⬜ **M4**（v1.0.0）GitHub 发布打磨
+- ✅ **M4**（v1.0.0）GitHub 发布打磨
+- ✅ **内部规则检测**：平台/服务指标采样 → 错误率突增/延迟超标自动告警（`/simulate/fault` 演示）
+- ✅ **告警通知**：钉钉/飞书/自定义 Webhook 推送（`.env` 配 `ALERT_WEBHOOK_URL`）
 
 ## License
 

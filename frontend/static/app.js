@@ -348,6 +348,10 @@ async function loadAlerts() {
     const toolbar = el("div", "toolbar");
     const simBtn = el("button", "btn danger", "🎬 模拟外部告警");
     simBtn.onclick = () => post("/api/demo/alert").then((r) => { toast(r.action === "created" ? "已产生告警" : r.action === "deduped" ? "同 key 告警已去重" : "已入库"); loadAlerts(); loadOverview(); }).catch((e) => toast(e.message, true));
+    const faultBtn = el("button", "btn danger", "⚠️ 模拟故障发布(内部规则)");
+    faultBtn.onclick = () => post("/api/simulate/fault").then((r) => { toast(r.message + `（新增 ${r.created ?? 0} 条内部告警）`); setTimeout(loadAlerts, 1200); setTimeout(loadOverview, 1200); }).catch((e) => toast(e.message, true));
+    const recBtn = el("button", "btn", "✅ 恢复服务");
+    recBtn.onclick = () => post("/api/simulate/recover").then((r) => { toast(r.message + `（收敛 ${r.resolved ?? 0} 条）`); setTimeout(loadAlerts, 1200); }).catch((e) => toast(e.message, true));
     const selLevel = el("select");
     [["", "全部级别"], ["high", "高危"], ["medium", "中危"], ["low", "低危"]].forEach(([k, l]) => selLevel.appendChild(new Option(l, k)));
     selLevel.value = alertFilter.level;
@@ -360,7 +364,7 @@ async function loadAlerts() {
     [["", "全部来源"], ["alertmanager", "Alertmanager"], ["custom", "通用Webhook"], ["internal", "内部规则"]].forEach(([k, l]) => selSrc.appendChild(new Option(l, k)));
     selSrc.value = alertFilter.source;
     selSrc.onchange = () => { alertFilter.source = selSrc.value; loadAlerts(); };
-    toolbar.append(simBtn, selLevel, selStatus, selSrc);
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc);
     v.append(demoBar, toolbar);
 
     const t = el("table");

@@ -6,6 +6,7 @@
 import hashlib
 
 from . import database as db
+from .notify import send_alert_notification
 
 # 外部级别 → 内部三档
 LEVEL_MAP = {
@@ -87,9 +88,15 @@ def upsert_alert(payload):
     key = payload.get("dedup_key") or dedup_key(source, title, resource_ref)
 
     if status in ("resolved", "ok", "recovered", "firing:resolved"):
-        updated = db.execute(
-            "UPDATE alert_events SET status='resolved', resolved_at=datetime('now','localtime') "
-            "WHERE dedup_key=? AND status='open'", (key,))
+        with db.get_conn() as conn:
+            cur = conn.execute(
+                "UPDATE alert_events SET status='resolved', resolved_at=datetime('now','localtime') "
+                "WHERE dedup_key=? AND status='open'", (key,))
+            updated = cur.rowcount
+        if updated:
+            send_alert_notification({"title": title, "level": level, "detail": detail,
+                                     "resource_ref": resource_ref, "source": source,
+                                     "status": "resolved"}, "resolved")
         return {"action": "resolved", "updated": updated}
 
     # 去重：同 key 且有 open 告警 → 更新时间不新增
@@ -104,7 +111,19 @@ def upsert_alert(payload):
         "INSERT INTO alert_events(source, dedup_key, level, title, detail, resource_ref, resource_id, item_id, related_deployment_id, status) "
         "VALUES(?,?,?,?,?,?,?,?,?,?)",
         (source, key, level, title, detail, resource_ref, rid, item_id, dep_id, "open"))
+    send_alert_notification({"title": title, "level": level, "detail": detail,
+                             "resource_ref": resource_ref, "source": source,
+                             "status": "open", "first_at": None}, "created")
     return {"action": "created", "id": aid, "item_id": item_id, "related_deployment_id": dep_id}
+
+
+def resolve_by_dedup_key(key):
+    """按 dedup_key 收敛同规则的 open 告警（内部规则引擎用），返回受影响行数"""
+    with db.get_conn() as conn:
+        cur = conn.execute(
+            "UPDATE alert_events SET status='resolved', resolved_at=datetime('now','localtime') "
+            "WHERE dedup_key=? AND status='open'", (key,))
+        return cur.rowcount
 
 
 def expire_stale_events(hours=24):
