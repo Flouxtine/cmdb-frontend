@@ -1,0 +1,14 @@
+services:
+  opsscope:
+    build: .
+    image: ghcr.io/flouxtine/cmdb-frontend:latest
+    container_name: opsscope
+    ports:
+      - "${PORT:-8080}:8000"
+    environment:
+      - OPS_SCOPE_DATA=/data
+    env_file:
+      - .env
+    volumes:
+      - ./data:/data
+    restart: unless-stopped

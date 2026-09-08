@@ -1,0 +1,72 @@
+name: CI/CD
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: 语法与测试
+        run: |
+          pip install -r requirements.txt -q
+          python -m py_compile app/*.py app/providers/*.py
+          python -m pytest tests/ -q
+          echo "OK"
+
+  # 构建并推送镜像：分支推 latest，tag 推送额外打版本号标签
+  docker:
+    needs: check
+    if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: 计算镜像名（GHCR 要求全小写）
+        run: echo "IMAGE=ghcr.io/${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+      - name: 登录 GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: 构建镜像
+        run: |
+          docker build -t "$IMAGE:latest" .
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            docker tag "$IMAGE:latest" "$IMAGE:$GITHUB_REF_NAME"
+            echo "版本标签: $GITHUB_REF_NAME"
+          fi
+      - name: 推送镜像
+        run: |
+          docker push "$IMAGE:latest"
+          if [ "$GITHUB_REF_TYPE" = "tag" ]; then
+            docker push "$IMAGE:$GITHUB_REF_NAME"
+          fi
+
+  # 发布事件上报（可选：配置 OPS_SCOPE_WEBHOOK_URL secret 后自动启用）
+  report-release:
+    needs: docker
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    steps:
+      - name: 上报发布到 OpsScope
+        env:
+          URL: ${{ secrets.OPS_SCOPE_WEBHOOK_URL }}
+          VERSION: ${{ github.ref_name }}
+        run: |
+          if [ -n "$URL" ]; then
+            curl -s -X POST "$URL/api/deployments" -H 'Content-Type: application/json' \
+              -d "{\"service\":\"opsscope\",\"version\":\"$VERSION\",\"commit\":\"${{ github.sha }}\",\"author\":\"${{ github.actor }}\",\"source\":\"github-actions\"}"
+            echo "已上报 $VERSION"
+          else
+            echo "未配置 OPS_SCOPE_WEBHOOK_URL，跳过上报"
+          fi
