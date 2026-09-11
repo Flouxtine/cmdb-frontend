@@ -367,6 +367,48 @@ def resolve_alert(aid: int):
     return {"ok": True}
 
 
+class AssignIn(BaseModel):
+    assignee: str = ""
+
+
+@router.post("/alerts/{aid}/assign")
+def assign_alert(aid: int, body: AssignIn):
+    """认领告警：设置负责人 + 进入处理中状态"""
+    if not db.fetch_one("SELECT id FROM alert_events WHERE id=?", (aid,)):
+        raise HTTPException(404, "告警不存在")
+    db.execute("UPDATE alert_events SET assignee=?, status=?, last_at=datetime('now','localtime') WHERE id=?",
+               (body.assignee, "in_progress", aid))
+    return {"ok": True}
+
+
+class CommentIn(BaseModel):
+    comment: str = ""
+
+
+@router.post("/alerts/{aid}/comment")
+def comment_alert(aid: int, body: CommentIn):
+    """追加处置备注（覆盖式记录最近备注）"""
+    if not db.fetch_one("SELECT id FROM alert_events WHERE id=?", (aid,)):
+        raise HTTPException(404, "告警不存在")
+    db.execute("UPDATE alert_events SET comment=?, last_at=datetime('now','localtime') WHERE id=?",
+               (body.comment, aid))
+    return {"ok": True}
+
+
+@router.post("/alerts/{aid}/status")
+def set_alert_status(aid: int, body: CommentIn):
+    """切换处理状态：in_progress / resolved（自由流转）"""
+    if not db.fetch_one("SELECT id FROM alert_events WHERE id=?", (aid,)):
+        raise HTTPException(404, "告警不存在")
+    new_status = body.comment if body.comment in ("open", "in_progress", "resolved") else ""
+    if not new_status:
+        raise HTTPException(400, "仅支持 open/in_progress/resolved")
+    resolved_at = "datetime('now','localtime')" if new_status == "resolved" else "NULL"
+    db.execute(f"UPDATE alert_events SET status=?, resolved_at={resolved_at}, last_at=datetime('now','localtime') WHERE id=?",
+               (new_status, aid))
+    return {"ok": True}
+
+
 @router.get("/rules")
 def list_rules():
     return db.fetch_all("SELECT * FROM rules ORDER BY level DESC, rule_key")

@@ -357,7 +357,7 @@ async function loadAlerts() {
     selLevel.value = alertFilter.level;
     selLevel.onchange = () => { alertFilter.level = selLevel.value; loadAlerts(); };
     const selStatus = el("select");
-    [["", "全部状态"], ["open", "未解决"], ["resolved", "已解决"], ["expired", "已过期"]].forEach(([k, l]) => selStatus.appendChild(new Option(l, k)));
+    [["", "全部状态"], ["open", "未解决"], ["in_progress", "处理中"], ["resolved", "已解决"], ["expired", "已过期"]].forEach(([k, l]) => selStatus.appendChild(new Option(l, k)));
     selStatus.value = alertFilter.status;
     selStatus.onchange = () => { alertFilter.status = selStatus.value; loadAlerts(); };
     const selSrc = el("select");
@@ -368,20 +368,39 @@ async function loadAlerts() {
     v.append(demoBar, toolbar);
 
     const t = el("table");
-    t.appendChild(el("thead", "", "<tr><th>级别</th><th>告警</th><th>来源</th><th>资源 / 业务</th><th>关联发布</th><th>状态</th><th>最近时间</th><th>操作</th></tr>"));
+    t.appendChild(el("thead", "", "<tr><th>级别</th><th>告警</th><th>来源</th><th>资源 / 业务</th><th>关联发布</th><th>状态</th><th>负责人 / 处置</th><th>最近时间</th><th>操作</th></tr>"));
     const tb = el("tbody");
-    if (!alerts.length) tb.innerHTML = `<tr><td colspan="8" class="empty">暂无告警 —— 点「模拟外部告警」体验接收流程</td></tr>`;
+    if (!alerts.length) tb.innerHTML = `<tr><td colspan="9" class="empty">暂无告警 —— 点「模拟外部告警」体验接收流程</td></tr>`;
     alerts.forEach((a) => {
       const tr = el("tr");
       const rel = a.related_deployment_id ? `<span class="rel-tag">⚠️ ${esc(a.deploy_version || "本次发布")}</span>` : '<span class="muted">-</span>';
-      const stCls = { open: "st-open", resolved: "st-resolved", expired: "st-expired" }[a.status] || "";
-      const stLabel = { open: "未解决", resolved: "已解决", expired: "已过期" }[a.status] || a.status;
+      const stCls = { open: "st-open", in_progress: "st-inprogress", resolved: "st-resolved", expired: "st-expired" }[a.status] || "";
+      const stLabel = { open: "未解决", in_progress: "处理中", resolved: "已解决", expired: "已过期" }[a.status] || a.status;
+      const handled = `<b>${esc(a.assignee || "未认领")}</b>${a.comment ? `<div class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.comment)}">${esc(a.comment)}</div>` : ""}`;
       tr.innerHTML = `<td><span class="lvl ${a.level}">${LEVEL_LABEL[a.level] || a.level}</span></td>
         <td><b>${esc(a.title)}</b><div class="muted">${esc(a.detail || "")}</div></td>
         <td><span class="src">${esc(SRC_LABEL[a.source] || a.source)}</span></td>
         <td>${esc(a.item_name || a.resource_ref || "-")}${a.credential_name ? `<div class="muted">账号:${esc(a.credential_name)}</div>` : ""}</td>
-        <td>${rel}</td><td class="${stCls}">${stLabel}</td><td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;
+        <td>${rel}</td><td class="${stCls}">${stLabel}</td><td>${handled}</td><td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;
       const act = el("td", "");
+      if (a.status !== "resolved" && a.status !== "expired") {
+        const ab2 = el("button", "btn sm", "认领");
+        ab2.onclick = () => {
+          const who = window.prompt("认领人（回车确认，将自动进入处理中）：", a.assignee || "");
+          if (who === null) return;
+          post(`/api/alerts/${a.id}/assign`, { assignee: who.trim() || "ops" })
+            .then(() => { toast(`已认领给 ${who.trim() || "ops"}`); loadAlerts(); }).catch((e) => toast(e.message, true));
+        };
+        act.appendChild(ab2);
+        const nb = el("button", "btn sm", "备注");
+        nb.onclick = () => {
+          const note = window.prompt("处置备注：", a.comment || "");
+          if (note === null) return;
+          post(`/api/alerts/${a.id}/comment`, { comment: note.trim() })
+            .then(() => { toast("备注已更新"); loadAlerts(); }).catch((e) => toast(e.message, true));
+        };
+        act.appendChild(nb);
+      }
       if (a.status === "open") {
         const rb = el("button", "btn sm", "解决");
         rb.onclick = () => post(`/api/alerts/${a.id}/resolve`).then(() => { toast("已解决"); loadAlerts(); loadOverview(); });

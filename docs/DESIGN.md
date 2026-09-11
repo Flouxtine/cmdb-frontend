@@ -134,3 +134,14 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `POST /credentials/{cid}/scan` / `POST /scan-all`：扫描产生 `source=compliance` 告警，重复扫描幂等（dedup_key），修复后自动收敛
 - `GET /compliance/summary`：合规率（按资源去重）、按规则/资源类型分布
 - 前端「合规中心」页：KPI（资源/违规/合规率）+ 规则分布 + 一键扫描 + 违规列表（标记合规）
+
+## 9.2 服务健康可视化（M5 补充）
+
+- 前端「服务健康」页：服务 × 指标（错误率/延迟/QPS）选择 → canvas 折线 + 阈值红线（错误率 5% / 延迟 500ms）
+- 实时刷新（5s 轮询 /health/series）+ 模拟故障/恢复按钮，曲线-阈值-告警闭环可视化
+
+## 9.3 告警处置流程（M6 补充）
+
+- `alert_events` 增 assignee / comment 列（含存量迁移）
+- `POST /alerts/{id}/assign`（认领→负责人+进入处理中）、`/comment`（处置备注）、`/status`（open/in_progress/resolved 流转）
+- 前端告警页：负责人/备注列 + 认领/备注/解决操作 + 「处理中」状态筛选与样式

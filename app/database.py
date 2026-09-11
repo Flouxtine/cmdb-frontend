@@ -94,6 +94,8 @@ def init_db():
                 item_id TEXT,
                 related_deployment_id INTEGER,
                 status TEXT DEFAULT 'open',
+                assignee TEXT DEFAULT '',
+                comment TEXT DEFAULT '',
                 first_at TEXT DEFAULT (datetime('now','localtime')),
                 last_at TEXT DEFAULT (datetime('now','localtime')),
                 resolved_at TEXT
@@ -130,6 +132,11 @@ def init_db():
         cols = [r[1] for r in conn.execute("PRAGMA table_info(alert_events)").fetchall()]
         if "resource_id" not in cols:
             conn.execute("ALTER TABLE alert_events ADD COLUMN resource_id INTEGER")
+        # 告警认领/处置字段（M6）
+        if "assignee" not in cols:
+            conn.execute("ALTER TABLE alert_events ADD COLUMN assignee TEXT DEFAULT ''")
+        if "comment" not in cols:
+            conn.execute("ALTER TABLE alert_events ADD COLUMN comment TEXT DEFAULT ''")
 
 
 def fetch_all(sql, params=()):
