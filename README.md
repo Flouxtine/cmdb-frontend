@@ -39,6 +39,7 @@ scripts/       report-release.sh 发布上报
 - ✅ **M4**（v1.0.0）GitHub 发布打磨
 - ✅ **内部规则检测**：平台/服务指标采样 → 错误率突增/延迟超标自动告警（`/simulate/fault` 演示）
 - ✅ **告警通知**：钉钉/飞书/自定义 Webhook 推送（`.env` 配 `ALERT_WEBHOOK_URL`）
+- ✅ **合规中心**：安全基线扫描（安全组高危端口 / OSS 公共访问 / 云盘未加密），违规自动产生告警 + 合规率概览
 
 ## License
 

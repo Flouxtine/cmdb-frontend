@@ -50,9 +50,9 @@ function switchView(name) {
   state.view = name;
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
-  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务", alerts: "告警分析" };
+  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务", alerts: "告警分析", compliance: "合规中心" };
   $("#page-title").textContent = T[name];
-  ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices, alerts: loadAlerts })[name]();
+  ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices, alerts: loadAlerts, compliance: loadCompliance })[name]();
 }
 document.querySelectorAll(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
 
@@ -418,6 +418,83 @@ async function showAiDrawer(a) {
   } catch (e) {
     body.innerHTML = `<div class="empty">分析失败：${esc(e.message)}</div>`;
   }
+}
+
+/* ---------------- 合规中心（安全基线扫描）---------------- */
+const RULE_LEVEL = { high: "高危", medium: "中危" };
+
+async function loadCompliance() {
+  const v = $("#view-compliance"); v.innerHTML = '<div class="empty">加载中...</div>';
+  try {
+    const s = await get("/api/compliance/summary");
+    v.innerHTML = "";
+    // KPI
+    const stats = el("div", "stat-grid");
+    stats.append(
+      mkStat(s.resource_total, "云资源总数", "ok"),
+      mkStat(s.violation_resources, "违规资源", s.violation_resources ? "hl" : "ok"),
+      mkStat(s.compliance_rate + "%", "合规率", s.compliance_rate >= 90 ? "ok" : s.compliance_rate >= 60 ? "ac" : "hl"));
+    v.appendChild(stats);
+
+    // 工具栏：一键扫描
+    const toolbar = el("div", "toolbar");
+    const scanBtn = el("button", "btn primary", "🔍 扫描全部账号");
+    scanBtn.onclick = () => {
+      scanBtn.disabled = true; scanBtn.textContent = "扫描中...";
+      post("/api/scan-all").then((rs) => {
+        const created = rs.reduce((x, r) => x + (r.created || 0), 0);
+        const violations = rs.reduce((x, r) => x + (r.violations || 0), 0);
+        toast(`扫描完成：检查 ${rs.reduce((x, r) => x + (r.scanned || 0), 0)} 资源，发现 ${violations} 项违规，新增 ${created} 条告警`);
+        loadCompliance(); loadOverview();
+      }).catch((e) => toast(e.message, true))
+        .finally(() => { scanBtn.disabled = false; scanBtn.textContent = "🔍 扫描全部账号"; });
+    };
+    toolbar.append(scanBtn, el("span", "muted", "扫描已同步的云资源，违规则自动产生合规告警（安全组高危端口 / OSS 公共访问 / 云盘未加密）"));
+    v.appendChild(toolbar);
+
+    // 规则分布
+    const ruleCard = el("div", "card");
+    ruleCard.appendChild(el("h3", "", "违规规则分布"));
+    const chips = el("div", "chips");
+    (s.by_rule || []).forEach((r) => chips.appendChild(el("span", "chip", `${esc(r.title)} <span class="lvl ${r.level}" style="margin-left:4px">${RULE_LEVEL[r.level] || r.level}</span> <b>${r.n}</b>`)));
+    if (!s.by_rule.length) chips.appendChild(el("span", "muted", "暂无违规，一切正常 🎉"));
+    ruleCard.appendChild(chips);
+    v.appendChild(ruleCard);
+
+    // 违规资源类型分布
+    const typeCard = el("div", "card");
+    typeCard.appendChild(el("h3", "", "违规资源类型分布"));
+    const t2 = el("div", "chips");
+    (s.by_type_violation || []).forEach((x) => t2.appendChild(el("span", "chip", `${RES_TYPES[x.resource_type] || x.resource_type} <b>${x.n}</b>`)));
+    typeCard.appendChild(t2);
+    v.appendChild(typeCard);
+
+    // 违规告警列表
+    const alerts = await get("/api/alerts?source=compliance&status=open");
+    const listCard = el("div", "card");
+    listCard.appendChild(el("h3", "", "违规资源列表"));
+    const t = el("table");
+    t.appendChild(el("thead", "", "<tr><th>级别</th><th>规则</th><th>资源</th><th>所属账号</th><th>详情</th><th>时间</th><th></th></tr>"));
+    const tb = el("tbody");
+    if (!alerts.length) tb.innerHTML = `<tr><td colspan="7" class="empty">暂无合规告警 —— 点「扫描全部账号」开始</td></tr>`;
+    alerts.forEach((a) => {
+      const tr = el("tr");
+      tr.innerHTML = `<td><span class="lvl ${a.level}">${RULE_LEVEL[a.level] || a.level}</span></td>
+        <td><b>${esc(a.title)}</b></td><td>${esc(a.item_name || a.resource_ref || "-")}</td>
+        <td><span class="tacc ${esc(a.source)}">${esc(a.credential_name || "-")}</span></td>
+        <td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.detail)}">${esc(a.detail)}</td>
+        <td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;
+      const act = el("td", "");
+      const rb = el("button", "btn sm", "标记合规");
+      rb.onclick = () => post(`/api/alerts/${a.id}/resolve`).then(() => { toast("已标记合规"); loadCompliance(); loadOverview(); });
+      act.appendChild(rb);
+      tr.appendChild(act);
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    listCard.appendChild(t);
+    v.appendChild(listCard);
+  } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 
 /* ---------------- 通用 ---------------- */

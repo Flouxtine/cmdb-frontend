@@ -8,7 +8,7 @@ from fastapi import APIRouter, Body, HTTPException, Request
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
-from . import alerts, ai, config
+from . import alerts, ai, compliance, config
 from . import database as db
 from . import metrics, security
 from .providers import registry, get_provider
@@ -423,6 +423,34 @@ def health_series(service: str, metric: str = "error_rate", limit: int = 120):
     return db.fetch_all(
         "SELECT value, ts FROM metric_samples WHERE service=? AND metric=? ORDER BY id DESC LIMIT ?",
         (service, metric, min(limit, 500)))[::-1]
+
+
+# ---------------- 合规扫描中心 ----------------
+@router.post("/credentials/{cid}/scan")
+def scan_credential(cid: str):
+    """对单个账号的云资源执行安全基线扫描（安全组高危端口/OSS 公共访问/磁盘未加密）"""
+    try:
+        return compliance.scan(cid)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
+@router.post("/scan-all")
+def scan_all():
+    """扫描全部账号的安全基线，返回各账号扫描结果"""
+    results = []
+    for c in db.fetch_all("SELECT id, name FROM credentials"):
+        r = compliance.scan(c["id"])
+        r["credential_id"] = c["id"]
+        r["credential_name"] = c["name"]
+        results.append(r)
+    return results
+
+
+@router.get("/compliance/summary")
+def compliance_summary():
+    """合规概览：资源总量/违规资源数/合规率 + 按规则、类型分布 + 违规明细"""
+    return compliance.summary()
 
 
 # ---------------- 概览 ----------------

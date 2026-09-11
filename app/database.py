@@ -114,13 +114,16 @@ def init_db():
             CREATE INDEX IF NOT EXISTS idx_metric_samples ON metric_samples(service, metric, ts);
             """
         )
-        # 种子规则（幂等）
+        # 种子规则（幂等）：内部检测规则 + 合规基线规则（与 compliance.CHECKS 对应）
         conn.executemany(
             "INSERT OR IGNORE INTO rules(rule_key, name, level) VALUES(?,?,?)",
             [
                 ("error_rate_spike", "错误率突增", "high"),
                 ("latency_high", "平均延迟超标", "medium"),
                 ("health_missing", "服务心跳中断", "high"),
+                ("sg_public_high_risk_port", "安全组对全网开放高危端口", "high"),
+                ("oss_public_access", "OSS Bucket 公共访问", "high"),
+                ("disk_not_encrypted", "云盘未加密", "medium"),
             ],
         )
         # 存量库轻量迁移：alert_events 补 resource_id 列

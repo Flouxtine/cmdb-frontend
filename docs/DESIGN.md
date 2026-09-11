@@ -127,3 +127,10 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 | M2 ✅ | 告警接收归一化 | curl 模拟 Alertmanager/通用 webhook → 正确入库、归一到资源、去重 | v0.2.0 |
 | M3 ✅ | 变更关联+AI | 模拟故障发布→告警→关联发布→AI 建议全链路 | v0.3.0 |
 | M4 | 发布打磨 | tag 即出镜像，按 DEPLOY.md 可复现部署 | v1.0.0 |
+
+## 9.1 合规中心（M5 补充）
+
+- 基线检查：安全组对 0.0.0.0/0 开放高危端口、OSS Bucket 公共访问（public-read/read-write）、云盘未加密
+- `POST /credentials/{cid}/scan` / `POST /scan-all`：扫描产生 `source=compliance` 告警，重复扫描幂等（dedup_key），修复后自动收敛
+- `GET /compliance/summary`：合规率（按资源去重）、按规则/资源类型分布
+- 前端「合规中心」页：KPI（资源/违规/合规率）+ 规则分布 + 一键扫描 + 违规列表（标记合规）
