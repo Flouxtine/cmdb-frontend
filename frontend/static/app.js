@@ -50,9 +50,9 @@ function switchView(name) {
   state.view = name;
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
-  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务", alerts: "告警分析", compliance: "合规中心" };
+  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务", alerts: "告警分析", compliance: "合规中心", health: "服务健康" };
   $("#page-title").textContent = T[name];
-  ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices, alerts: loadAlerts, compliance: loadCompliance })[name]();
+  ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices, alerts: loadAlerts, compliance: loadCompliance, health: loadHealth })[name]();
 }
 document.querySelectorAll(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
 
@@ -495,6 +495,92 @@ async function loadCompliance() {
     listCard.appendChild(t);
     v.appendChild(listCard);
   } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+}
+
+/* ---------------- 服务健康（内部规则检测数据可视化）---------------- */
+const healthCfg = { service: "demo-api", metric: "error_rate", live: false };
+const METRIC_META = {
+  error_rate: { label: "错误率 %", color: "#f56c6c", threshold: 5 },
+  latency: { label: "延迟 ms", color: "#e6a23c", threshold: 500 },
+  qps: { label: "QPS", color: "#409eff", threshold: null },
+};
+let healthTimer = null;
+
+function drawLine(canvas, data, color, threshold) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  if (!data.length) {
+    ctx.fillStyle = "#909399"; ctx.font = "18px sans-serif";
+    ctx.fillText("暂无数据（等待采样…）", W / 2 - 90, H / 2);
+    return;
+  }
+  const max = Math.max(...data) * 1.15 || 1;
+  ctx.strokeStyle = "#ebeef5"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = (H - 30) * i / 4 + 10; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  ctx.strokeStyle = color; ctx.lineWidth = 2; ctx.beginPath();
+  data.forEach((val, i) => {
+    const x = i * (W - 20) / Math.max(1, data.length - 1) + 10;
+    const y = H - 20 - val / max * (H - 40);
+    i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+  });
+  ctx.stroke();
+  if (threshold && max > threshold) {
+    const y = H - 20 - threshold / max * (H - 40);
+    ctx.strokeStyle = "#f56c6c"; ctx.setLineDash([6, 4]); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); ctx.setLineDash([]);
+    ctx.fillStyle = "#f56c6c"; ctx.font = "11px sans-serif"; ctx.fillText(`阈值 ${threshold}`, W - 66, y - 4);
+  }
+}
+
+async function loadHealth() {
+  const v = $("#view-health");
+  clearInterval(healthTimer);
+  const cfg = healthCfg;
+  v.innerHTML = "";
+  const toolbar = el("div", "toolbar");
+  const selSvc = el("select");
+  [["demo-api", "demo-api（演示服务）"], ["opsscope", "opsscope（平台自身）"]].forEach(([k, l]) => selSvc.appendChild(new Option(l, k)));
+  selSvc.value = cfg.service;
+  selSvc.onchange = () => { cfg.service = selSvc.value; loadHealth(); };
+  const selMetric = el("select");
+  Object.entries(METRIC_META).forEach(([k, m]) => selMetric.appendChild(new Option(m.label, k)));
+  selMetric.value = cfg.metric;
+  selMetric.onchange = () => { cfg.metric = selMetric.value; loadHealth(); };
+  const liveBox = el("label", "", `<input type="checkbox" id="health-live" ${cfg.live ? "checked" : ""}> 实时刷新(5s)`);
+  const liveInput = liveBox.querySelector("input");
+  liveInput.onchange = () => { cfg.live = liveInput.checked; if (cfg.live) startLive(); else clearInterval(healthTimer); };
+  const faultBtn = el("button", "btn danger", "⚠️ 模拟故障");
+  faultBtn.onclick = () => post("/api/simulate/fault").then((r) => { toast(r.message + `（新增 ${r.created ?? 0} 条告警）`); loadHealth(); });
+  const recBtn = el("button", "btn", "✅ 恢复");
+  recBtn.onclick = () => post("/api/simulate/recover").then((r) => { toast(r.message + `（收敛 ${r.resolved ?? 0} 条）`); loadHealth(); });
+  toolbar.append(selSvc, selMetric, liveBox, faultBtn, recBtn, el("span", "muted", "指标每 5-10s 采样入库，供内部规则检测（错误率>5% / 延迟>500ms 自动告警）"));
+  v.appendChild(toolbar);
+
+  const card = el("div", "card");
+  const meta = METRIC_META[cfg.metric];
+  const legend = el("div", "", `<b>${esc(cfg.service)} · ${meta.label}</b> <span class="muted">（最近采样点）</span>`);
+  const canvas = el("canvas"); canvas.width = 1200; canvas.height = 300;
+  canvas.style.width = "100%";
+  card.append(legend, canvas);
+  v.appendChild(card);
+
+  try {
+    const series = await get(`/api/health/series?service=${encodeURIComponent(cfg.service)}&metric=${encodeURIComponent(cfg.metric)}&limit=120`);
+    drawLine(canvas, series.map((p) => p.value), meta.color, meta.threshold);
+    if (!series.length) v.appendChild(el("div", "tip", "暂无采样数据 —— 后台采样线程会持续写入，稍等片刻或点「模拟故障」立即产生数据。"));
+  } catch (e) {
+    card.appendChild(el("div", "empty", `加载失败：${esc(e.message)}`));
+  }
+
+  function startLive() {
+    clearInterval(healthTimer);
+    healthTimer = setInterval(() => {
+      get(`/api/health/series?service=${encodeURIComponent(cfg.service)}&metric=${encodeURIComponent(cfg.metric)}&limit=120`)
+        .then((s) => drawLine(canvas, s.map((p) => p.value), meta.color, meta.threshold))
+        .catch(() => {});
+    }, 5000);
+  }
+  if (cfg.live) startLive();
 }
 
 /* ---------------- 通用 ---------------- */

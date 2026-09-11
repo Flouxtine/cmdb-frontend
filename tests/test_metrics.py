@@ -46,6 +46,9 @@ def test_health_series(client):
     series = client.get("/api/health/series?service=demo-api&metric=error_rate&limit=10").json()
     assert len(series) >= 1
     assert "value" in series[0] and "ts" in series[0]
+    # 支持多指标：latency 序列应存在且为数值
+    lat = client.get("/api/health/series?service=demo-api&metric=latency&limit=5").json()
+    assert len(lat) >= 1 and isinstance(lat[0]["value"], (int, float))
 
 
 def test_alertmanager_webhook_payload(client):
