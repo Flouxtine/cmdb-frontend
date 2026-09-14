@@ -673,6 +673,67 @@ def escalation_check():
     return escalation.run_escalation_check()
 
 
+# ---------------- CSV 导出 ----------------
+import csv as _csv
+import io as _io
+
+
+def _csv_response(filename, header, rows):
+    buf = _io.StringIO()
+    writer = _csv.writer(buf)
+    writer.writerow(header)
+    writer.writerows(rows)
+    return Response(
+        content="\ufeff" + buf.getvalue(),   # BOM 便于 Excel 识别 UTF-8
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'})
+
+
+@router.get("/alerts/export.csv")
+def export_alerts_csv(level: str = "", status: str = "", source: str = "", service: str = "",
+                      assignee: str = "", unassigned: int = 0):
+    """导出告警列表 CSV（与 /alerts 同筛选）"""
+    alerts = list_alerts(level=level, status=status, source=source, service=service,
+                         assignee=assignee, unassigned=unassigned)
+    header = ["ID", "级别", "标题", "来源", "资源", "账号", "关联发布", "状态", "负责人", "产生时间", "最近时间"]
+    rows = [[a["id"], a["level"], a["title"], a["source"], a["item_name"] or a["resource_ref"] or "",
+             a["credential_name"] or "", a["deploy_version"] or "", a["status"], a["assignee"] or "",
+             a["first_at"], a["last_at"]] for a in alerts]
+    return _csv_response("alerts.csv", header, rows)
+
+
+@router.get("/alerts/report/export.csv")
+def export_report_csv(days: int = 7):
+    """导出处置统计报表 CSV（按天趋势 + 认领人工作量）"""
+    r = alert_report(days=days)
+    sections = [f"# 处置统计报表（近 {r['days']} 天）", f"# 产生告警: {r['produced']}  已解决: {r['resolved']}  "
+                  f"当前未解决: {r['open_now']}  平均解决时长: {r['avg_resolve_hours'] or '-'} 小时"]
+    sections.append("#")
+    sections.append("# 按天趋势")
+    sections.append("# 日期,产生,解决")
+    days_map = {}
+    for d in r["by_day"]["produced"]:
+        days_map[d["day"]] = [d["n"], 0]
+    for d in r["by_day"]["resolved"]:
+        days_map.setdefault(d["day"], [0, 0])
+        days_map[d["day"]][1] = d["n"]
+    for day in sorted(days_map):
+        sections.append(f"{day},{days_map[day][0]},{days_map[day][1]}")
+    sections.append("#")
+    sections.append("# 认领人工作量")
+    sections.append("# 负责人,处理量,已解决")
+    for x in r["by_assignee"]:
+        sections.append(f"{x['assignee']},{x['total']},{x['resolved'] or 0}")
+    sections.append("#")
+    sections.append("# 来源分布")
+    for x in r["by_source"]:
+        sections.append(f"{x['source']},{x['n']}")
+    return Response(
+        content="\ufeff" + "\n".join(sections) + "\n",
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="report-{r["days"]}d.csv"'})
+
+
 # ---------------- 处置协作 / 指标输出 ----------------
 @router.get("/metrics")
 def prometheus_metrics():

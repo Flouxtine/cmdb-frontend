@@ -373,7 +373,9 @@ async function loadAlerts() {
     autoBtn.onclick = () => showAutoActions();
     const silenceBtn = el("button", "btn", "🔕 静默");
     silenceBtn.onclick = () => showSilences();
-    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn, silenceBtn);
+    const exportBtn = el("button", "btn", "⬇️ 导出 CSV");
+    exportBtn.onclick = () => { window.location.href = `/api/alerts/export.csv?${new URLSearchParams(Object.entries(alertFilter).filter(([, x]) => x))}`; };
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn, silenceBtn, exportBtn);
 
     // 处置看板：KPI + 认领人负载
     const board = el("div", "stat-grid");
@@ -680,6 +682,9 @@ async function showAlertReport() {
     const r = await get("/api/alerts/report?days=7");
     body.innerHTML = "";
     const fmtHours = (h) => (h === null || h === undefined ? "-" : h < 1 ? `${Math.round(h * 60)} 分钟` : `${h} 小时`);
+    const exportBtn = el("button", "btn", "⬇️ 导出报表 CSV");
+    exportBtn.onclick = () => { window.location.href = "/api/alerts/report/export.csv?days=7"; };
+    body.appendChild(exportBtn);
     body.appendChild(sec("近 7 天概览", (() => {
       const s = el("div", "stat-grid");
       s.style.marginBottom = "0";

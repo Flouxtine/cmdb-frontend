@@ -202,3 +202,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `GET /api/escalation/config`、`POST /api/escalation/check`；后台采样线程周期调用
 - 前端：告警行「⚡ 已升级」标签
 - 修复：julianday 差值单位（天→×24 小时）；测试线程首轮抢跑（_loop 先 sleep）；报表边界 flaky（-31day）
+
+## 9.10 CSV 导出（M14 补充）
+
+- `GET /api/alerts/export.csv`：告警列表导出（与 /alerts 同筛选：级别/状态/来源/服务/负责人/未认领），UTF-8 BOM 兼容 Excel
+- `GET /api/alerts/report/export.csv?days=N`：处置报表导出（概览 + 按天趋势 + 认领人工作量 + 来源分布）
+- 前端：告警页「⬇️ 导出 CSV」（带当前筛选）、处置统计抽屉「导出报表 CSV」
