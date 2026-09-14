@@ -537,6 +537,9 @@ async function loadCompliance() {
         <td class="muted" style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.detail)}">${esc(a.detail)}</td>
         <td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;
       const act = el("td", "");
+      const rmBtn = el("button", "btn sm primary", "💡 修复建议");
+      rmBtn.onclick = () => showRemediation(a);
+      act.appendChild(rmBtn);
       const rb = el("button", "btn sm", "标记合规");
       rb.onclick = () => post(`/api/alerts/${a.id}/resolve`).then(() => { toast("已标记合规"); loadCompliance(); loadOverview(); });
       act.appendChild(rb);
@@ -547,6 +550,34 @@ async function loadCompliance() {
     listCard.appendChild(t);
     v.appendChild(listCard);
   } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+}
+
+/* 合规修复建议抽屉 */
+async function showRemediation(a) {
+  const dlg = openDrawer(`💡 修复建议 · ${esc(a.title)}`, el("div"));
+  const body = dlg.body;
+  body.appendChild(el("div", "muted", "生成中..."));
+  try {
+    const r = await post("/api/compliance/remediation", { alert_id: a.id });
+    body.innerHTML = "";
+    const engine = r.engine === "llm" ? "LLM 增强（定制步骤）" : r.engine === "llm-fallback" ? "LLM失败 → 内置模板" : "内置整改模板";
+    body.appendChild(sec("引擎", el("span", "src", esc(engine))));
+    body.appendChild(sec("违规对象", kvHtml([
+      ["规则", esc(r.rule_title || "-")], ["资源", esc(r.resource || "-")],
+      ["所属账号", esc(r.account || "-")], ["详情", esc(r.detail || "-")]])));
+    const stepsSec = el("div");
+    if ((r.steps || []).length) {
+      const ol = el("ol", "", "");
+      r.steps.forEach((s, i) => ol.appendChild(el("li", "", esc(s))));
+      ol.style.paddingLeft = "18px";
+      ol.style.lineHeight = "1.9";
+      stepsSec.appendChild(ol);
+    } else stepsSec.appendChild(el("div", "muted", "暂无修复步骤"));
+    body.appendChild(sec("整改步骤", stepsSec));
+    body.appendChild(el("div", "tip", "完成整改后点「标记合规」或重新扫描，平台会自动收敛该违规。"));
+  } catch (e) {
+    body.innerHTML = `<div class="empty">生成失败：${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------------- 服务健康（内部规则检测数据可视化）---------------- */

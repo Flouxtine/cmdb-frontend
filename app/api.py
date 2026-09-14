@@ -574,6 +574,15 @@ def scan_all():
     return results
 
 
+@router.post("/compliance/remediation")
+def compliance_remediation(body: AiExplainIn):
+    """为合规违规告警生成修复建议（内置模板 / LLM 增强）"""
+    try:
+        return compliance.remediation_for_alert(body.alert_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
+
+
 @router.get("/compliance/summary")
 def compliance_summary():
     """合规概览：资源总量/违规资源数/合规率 + 按规则、类型分布 + 违规明细"""

@@ -170,3 +170,10 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `GET /api/alerts/report?days=N`（1-90，默认 7）：产生/解决/当前未解决/平均解决时长（julianday 差）
 - 按认领人工作量（含"(未认领)"分组）、按天趋势（产生/解决）、按来源分布
 - 前端：告警页「📊 处置统计」按钮 → 抽屉报表（KPI 卡 + 认领人表格 + 按天表格 + 来源 chips）
+
+## 9.6 合规修复建议（M10 补充）
+
+- `POST /api/compliance/remediation {alert_id}`：为违规告警生成整改步骤
+  - 内置模板：每检查项配 5 步整改（云控制台操作，见 CHECKS[].remediation）
+  - LLM 增强：配了 LLM_API_KEY 时用资源+账号+模板上下文生成定制步骤（engine=llm，失败回退 template）
+- 前端：合规中心违规行「💡 修复建议」按钮 → 抽屉（引擎/违规对象/分步整改）
