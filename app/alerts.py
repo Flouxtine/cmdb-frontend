@@ -71,6 +71,23 @@ def _service_name_of(item_id, rid):
     return None
 
 
+def is_silenced(service_or_ref=""):
+    """静默窗口检查：生效中的静默规则（全局 svc='' 无条件命中；服务级匹配目标）。
+    时间基于 SQLite localtime，窗口含端点。"""
+    with db.get_conn() as conn:
+        rows = conn.execute(
+            "SELECT service FROM silences "
+            "WHERE datetime(starts_at) <= datetime('now','localtime') "
+            "AND datetime(ends_at) >= datetime('now','localtime')").fetchall()
+    for r in rows:
+        svc = (r["service"] or "").strip()
+        if not svc:
+            return True  # 全局静默
+        if service_or_ref and (svc == service_or_ref or svc in service_or_ref or service_or_ref in svc):
+            return True
+    return False
+
+
 def upsert_alert(payload):
     """归一化并落库。
     payload: {source, level, title, detail, resource_ref, status, dedup_key?}
@@ -87,6 +104,11 @@ def upsert_alert(payload):
     rid, item_id = match_resource(resource_ref)
     service_name = _service_name_of(item_id, rid)
     key = payload.get("dedup_key") or dedup_key(source, title, resource_ref)
+
+    # 静默窗口：命中则不落库（不通知、不自愈）
+    if status in ("", "open", "firing", "firing:active"):
+        if is_silenced(resource_ref) or (service_name and is_silenced(service_name)):
+            return {"action": "silenced", "key": key}
 
     if status in ("resolved", "ok", "recovered", "firing:resolved"):
         with db.get_conn() as conn:

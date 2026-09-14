@@ -22,7 +22,7 @@ def client():
 def clean_db():
     from app import database
     with database.get_conn() as conn:
-        for t in ["cmdb_item_resource", "cmdb_items", "resources", "deployments", "credentials", "alert_events", "metric_samples", "action_logs"]:
+        for t in ["cmdb_item_resource", "cmdb_items", "resources", "deployments", "credentials", "alert_events", "metric_samples", "action_logs", "silences"]:
             conn.execute(f"DELETE FROM {t}")
         # 自愈动作复位为默认关闭
         conn.execute("UPDATE auto_actions SET enabled=0")

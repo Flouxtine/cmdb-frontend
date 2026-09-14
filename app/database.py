@@ -128,6 +128,15 @@ def init_db():
                 detail TEXT DEFAULT '',
                 created_at TEXT DEFAULT (datetime('now','localtime'))
             );
+            CREATE TABLE IF NOT EXISTS silences (
+                id TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                service TEXT DEFAULT '',
+                starts_at TEXT NOT NULL,
+                ends_at TEXT NOT NULL,
+                note TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            );
             """
         )
         # 种子规则（幂等）：内部检测规则 + 合规基线规则（与 compliance.CHECKS 对应）

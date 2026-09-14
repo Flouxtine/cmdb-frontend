@@ -371,7 +371,9 @@ async function loadAlerts() {
     reportBtn.onclick = () => showAlertReport();
     const autoBtn = el("button", "btn", "⚙️ 自愈规则");
     autoBtn.onclick = () => showAutoActions();
-    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn);
+    const silenceBtn = el("button", "btn", "🔕 静默");
+    silenceBtn.onclick = () => showSilences();
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn, silenceBtn);
 
     // 处置看板：KPI + 认领人负载
     const board = el("div", "stat-grid");
@@ -771,6 +773,65 @@ async function showAutoActions() {
       logSec.appendChild(t);
     } else logSec.appendChild(el("div", "muted", "暂无动作日志 —— 开启规则后模拟一条告警即可看到"));
     body.appendChild(sec("最近动作日志（审计）", logSec));
+  } catch (e) {
+    body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+/* 静默窗口抽屉：当前静默列表 + 新建维护窗口 */
+async function showSilences() {
+  const dlg = openDrawer("🔕 告警静默 / 维护窗口", el("div"));
+  const body = dlg.body;
+  body.appendChild(el("div", "muted", "加载中..."));
+  try {
+    const silences = await get("/api/silences");
+    body.innerHTML = "";
+    body.appendChild(el("div", "tip", "维护/发版窗口内，匹配的告警会被静默（不产生、不通知、不自愈）。演示：建一个覆盖当前时刻的全局窗口 → 点「模拟外部告警」→ 提示已被静默。"));
+    // 新建表单
+    const f = (label, node) => { const row = el("div", "form-row"); row.append(el("label", "", esc(label)), node); return row; };
+    const name = el("input"); name.placeholder = "如：双11大促维护";
+    const service = el("select");
+    service.appendChild(new Option("全部服务（全局）", ""));
+    service.appendChild(new Option("demo-api", "demo-api"));
+    service.appendChild(new Option("opsscope", "opsscope"));
+    const nowStr = new Date().toISOString().slice(0, 16).replace("T", " ");
+    const endStr = new Date(Date.now() + 60 * 60 * 1000).toISOString().slice(0, 16).replace("T", " ");
+    const start = el("input"); start.value = nowStr;
+    const end = el("input"); end.value = endStr;
+    const note = el("input"); note.placeholder = "说明（可选）";
+    const form = el("div");
+    form.append(f("名称", name), f("作用服务", service), f("开始时间", start), f("结束时间", end), f("说明", note));
+    const addBtn = el("button", "btn primary", "创建静默");
+    addBtn.onclick = () => post("/api/silences", {
+      name: name.value.trim() || "未命名静默", service: service.value,
+      starts_at: start.value, ends_at: end.value, note: note.value.trim(),
+    }).then((r) => { toast("静默已创建"); dlg.close(); }).catch((e) => toast(e.message, true));
+    body.appendChild(sec("新建维护窗口", form));
+    body.appendChild(addBtn);
+
+    // 当前列表
+    const listSec = el("div");
+    if (silences.length) {
+      const t = el("table");
+      t.appendChild(el("thead", "", "<tr><th>名称</th><th>范围</th><th>起止时间</th><th>状态</th><th></th></tr>"));
+      const tb = el("tbody");
+      silences.forEach((s) => {
+        const st = { active: '<span class="tag ok">生效中</span>', upcoming: '<span class="tag low">待生效</span>', expired: '<span class="tag info">已过期</span>' }[s.status] || s.status;
+        const tr = el("tr");
+        tr.innerHTML = `<td><b>${esc(s.name)}</b>${s.note ? `<div class="muted">${esc(s.note)}</div>` : ""}</td>
+          <td>${s.service ? esc(s.service) : '<span class="muted">全局</span>'}</td>
+          <td class="muted">${esc(s.starts_at)} ~ ${esc(s.ends_at)}</td><td>${st}</td>`;
+        const td = el("td");
+        const db = el("button", "btn sm danger", "删除");
+        db.onclick = () => del(`/api/silences/${s.id}`).then(() => { toast("已删除"); showSilences(); });
+        td.appendChild(db);
+        tr.appendChild(td);
+        tb.appendChild(tr);
+      });
+      t.appendChild(tb);
+      listSec.appendChild(t);
+    } else listSec.appendChild(el("div", "muted", "暂无静默规则"));
+    body.appendChild(sec("当前静默规则", listSec));
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
   }

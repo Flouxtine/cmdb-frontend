@@ -75,6 +75,14 @@ class AlertCommentIn(BaseModel):
     comment: str = Field(..., min_length=1, max_length=500)
 
 
+class SilenceIn(BaseModel):
+    name: str = Field(..., min_length=1, max_length=100)
+    service: str = ""
+    starts_at: str
+    ends_at: str
+    note: str = ""
+
+
 def _check_webhook_token(request: Request):
     """Webhook 鉴权：配置了 WEBHOOK_TOKEN 则要求 X-Ops-Scope-Token 匹配"""
     if config.WEBHOOK_TOKEN and request.headers.get("X-Ops-Scope-Token") != config.WEBHOOK_TOKEN:
@@ -588,6 +596,36 @@ def compliance_remediation(body: AiExplainIn):
 def compliance_summary():
     """合规概览：资源总量/违规资源数/合规率 + 按规则、类型分布 + 违规明细"""
     return compliance.summary()
+
+
+# ---------------- 告警静默 / 维护窗口 ----------------
+@router.get("/silences")
+def list_silences():
+    """静默规则列表（带生效状态）"""
+    rows = db.fetch_all("SELECT * FROM silences ORDER BY starts_at DESC")
+    now = db.fetch_one("SELECT datetime('now','localtime') AS n")["n"]
+    for r in rows:
+        r["status"] = "active" if r["starts_at"] <= now <= r["ends_at"] else (
+            "upcoming" if r["starts_at"] > now else "expired")
+    return rows
+
+
+@router.post("/silences")
+def create_silence(body: SilenceIn):
+    if body.starts_at >= body.ends_at:
+        raise HTTPException(400, "结束时间必须晚于开始时间")
+    sid = uuid.uuid4().hex
+    db.execute("INSERT INTO silences(id, name, service, starts_at, ends_at, note) VALUES(?,?,?,?,?,?)",
+               (sid, body.name, body.service, body.starts_at, body.ends_at, body.note))
+    return {"id": sid}
+
+
+@router.delete("/silences/{sid}")
+def delete_silence(sid: str):
+    if not db.fetch_one("SELECT id FROM silences WHERE id=?", (sid,)):
+        raise HTTPException(404, "静默不存在")
+    db.execute("DELETE FROM silences WHERE id=?", (sid,))
+    return {"ok": True}
 
 
 # ---------------- 自动处置 / 自愈规则 ----------------

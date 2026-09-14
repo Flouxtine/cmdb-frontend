@@ -185,3 +185,11 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - 触发：告警创建（webhook/内部规则/合规扫描均走 upsert → created）自动执行启用的动作
 - `GET/PATCH /api/auto-actions`、`GET /api/action-logs`、`POST /api/actions/{key}/run/{alert_id}`（手动触发）
 - 前端：告警页「⚙️ 自愈规则」抽屉（规则开关 + 最近动作审计）
+
+## 9.8 告警静默 / 维护窗口（M12 补充）
+
+- `silences` 表：名称/作用服务（空=全局）/起止时间/说明；`GET/POST/DELETE /api/silences`
+- 抑制：告警创建前检查生效中静默（全局无条件命中，服务级按 resource_ref/服务名匹配）→ `action=silenced`，不落库/不通知/不自愈
+- 状态标签：生效中 / 待生效 / 已过期（接口计算）
+- 前端：告警页「🔕 静默」抽屉（新建窗口表单 + 当前列表 + 删除）
+- 修复：is_silenced 全局静默空入参失效 bug；conftest 清理 silences 防污染
