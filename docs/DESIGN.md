@@ -221,3 +221,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `POST /api/alerts/batch {action: resolve|assign|comment, ids, assignee?, comment?}`
   - 校验：action 合法 / ids 非空 / assign 需 assignee / comment 需 content；返回 affected + not_found 计数
 - 前端：告警表加复选框列 + 表头全选（排除已解决/已过期）；toolbar 显示选中数 + 批量解决/认领/备注按钮
+
+## 9.13 健康页多指标叠加（M17 补充）
+
+- 前端「📈 多指标叠加」切换：并行拉取 错误率/延迟/QPS 三序列，各指标独立归一化 0-100% 同图绘制（图例色块+当前值），对比趋势形态
+- 单指标模式保留阈值红线；叠加模式指标选择器禁用
+- 后端复用 /health/series（多指标已支持）

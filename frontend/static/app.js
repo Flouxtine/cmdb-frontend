@@ -610,7 +610,7 @@ async function showRemediation(a) {
 }
 
 /* ---------------- 服务健康（内部规则检测数据可视化）---------------- */
-const healthCfg = { service: "demo-api", metric: "error_rate", live: false };
+const healthCfg = { service: "demo-api", metric: "error_rate", live: false, mode: "single" };
 const METRIC_META = {
   error_rate: { label: "错误率 %", color: "#f56c6c", threshold: 5 },
   latency: { label: "延迟 ms", color: "#e6a23c", threshold: 500 },
@@ -644,6 +644,33 @@ function drawLine(canvas, data, color, threshold) {
   }
 }
 
+function drawMultiLine(canvas, seriesList, metas) {
+  const ctx = canvas.getContext("2d");
+  const W = canvas.width, H = canvas.height;
+  ctx.clearRect(0, 0, W, H);
+  ctx.strokeStyle = "#ebeef5"; ctx.lineWidth = 1;
+  for (let i = 0; i <= 4; i++) { const y = (H - 30) * i / 4 + 10; ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+  const hasData = seriesList.some((s) => s.length);
+  if (!hasData) {
+    ctx.fillStyle = "#909399"; ctx.font = "18px sans-serif";
+    ctx.fillText("暂无数据（等待采样…）", W / 2 - 90, H / 2);
+    return;
+  }
+  // 各指标独立归一化到 0-100%（便于对比趋势形态）
+  seriesList.forEach((data, idx) => {
+    const meta = metas[idx];
+    if (!data.length) return;
+    const max = Math.max(...data) || 1;
+    ctx.strokeStyle = meta.color; ctx.lineWidth = 2; ctx.beginPath();
+    data.forEach((val, i) => {
+      const x = i * (W - 20) / Math.max(1, data.length - 1) + 10;
+      const y = H - 20 - (val / max) * 100 / 100 * (H - 40);
+      i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+    });
+    ctx.stroke();
+  });
+}
+
 async function loadHealth() {
   const v = $("#view-health");
   clearInterval(healthTimer);
@@ -657,7 +684,10 @@ async function loadHealth() {
   const selMetric = el("select");
   Object.entries(METRIC_META).forEach(([k, m]) => selMetric.appendChild(new Option(m.label, k)));
   selMetric.value = cfg.metric;
+  selMetric.disabled = cfg.mode === "multi";
   selMetric.onchange = () => { cfg.metric = selMetric.value; loadHealth(); };
+  const modeBtn = el("button", "btn", cfg.mode === "multi" ? "📈 多指标叠加 ✓" : "📈 多指标叠加");
+  modeBtn.onclick = () => { cfg.mode = cfg.mode === "multi" ? "single" : "multi"; loadHealth(); };
   const liveBox = el("label", "", `<input type="checkbox" id="health-live" ${cfg.live ? "checked" : ""}> 实时刷新(5s)`);
   const liveInput = liveBox.querySelector("input");
   liveInput.onchange = () => { cfg.live = liveInput.checked; if (cfg.live) startLive(); else clearInterval(healthTimer); };
@@ -665,32 +695,52 @@ async function loadHealth() {
   faultBtn.onclick = () => post("/api/simulate/fault").then((r) => { toast(r.message + `（新增 ${r.created ?? 0} 条告警）`); loadHealth(); });
   const recBtn = el("button", "btn", "✅ 恢复");
   recBtn.onclick = () => post("/api/simulate/recover").then((r) => { toast(r.message + `（收敛 ${r.resolved ?? 0} 条）`); loadHealth(); });
-  toolbar.append(selSvc, selMetric, liveBox, faultBtn, recBtn, el("span", "muted", "指标每 5-10s 采样入库，供内部规则检测（错误率>5% / 延迟>500ms 自动告警）"));
+  toolbar.append(selSvc, selMetric, modeBtn, liveBox, faultBtn, recBtn, el("span", "muted", "指标每 5-10s 采样入库，供内部规则检测（错误率>5% / 延迟>500ms 自动告警）"));
   v.appendChild(toolbar);
 
   const card = el("div", "card");
   const meta = METRIC_META[cfg.metric];
-  const legend = el("div", "", `<b>${esc(cfg.service)} · ${meta.label}</b> <span class="muted">（最近采样点）</span>`);
+  const legend = el("div", "", "");
   const canvas = el("canvas"); canvas.width = 1200; canvas.height = 300;
   canvas.style.width = "100%";
   card.append(legend, canvas);
   v.appendChild(card);
 
+  function updateLegend(singleMeta, multiValues) {
+    if (cfg.mode === "multi") {
+      legend.innerHTML = `<b>${esc(cfg.service)} · 多指标叠加（归一化对比）</b> <span class="muted">— ` +
+        Object.entries(METRIC_META).map(([k, m]) => `<i style="display:inline-block;width:10px;height:10px;background:${m.color};border-radius:50%;margin-right:3px"></i>${m.label}`).join("　") +
+        `</span>`;
+    } else {
+      legend.innerHTML = `<b>${esc(cfg.service)} · ${singleMeta.label}</b> <span class="muted">（最近采样点）</span>`;
+    }
+  }
+
+  async function render() {
+    if (cfg.mode === "multi") {
+      const keys = Object.keys(METRIC_META);
+      const all = await Promise.all(keys.map((k) =>
+        get(`/api/health/series?service=${encodeURIComponent(cfg.service)}&metric=${k}&limit=120`)));
+      const seriesList = all.map((s) => s.map((p) => p.value));
+      drawMultiLine(canvas, seriesList, keys.map((k) => METRIC_META[k]));
+      updateLegend(null, seriesList.map((s, i) => ({ meta: METRIC_META[keys[i]], v: s[s.length - 1] })));
+    } else {
+      const series = await get(`/api/health/series?service=${encodeURIComponent(cfg.service)}&metric=${encodeURIComponent(cfg.metric)}&limit=120`);
+      drawLine(canvas, series.map((p) => p.value), meta.color, meta.threshold);
+      updateLegend(meta, null);
+      if (!series.length) v.appendChild(el("div", "tip", "暂无采样数据 —— 后台采样线程会持续写入，稍等片刻或点「模拟故障」立即产生数据。"));
+    }
+  }
+
   try {
-    const series = await get(`/api/health/series?service=${encodeURIComponent(cfg.service)}&metric=${encodeURIComponent(cfg.metric)}&limit=120`);
-    drawLine(canvas, series.map((p) => p.value), meta.color, meta.threshold);
-    if (!series.length) v.appendChild(el("div", "tip", "暂无采样数据 —— 后台采样线程会持续写入，稍等片刻或点「模拟故障」立即产生数据。"));
+    await render();
   } catch (e) {
     card.appendChild(el("div", "empty", `加载失败：${esc(e.message)}`));
   }
 
   function startLive() {
     clearInterval(healthTimer);
-    healthTimer = setInterval(() => {
-      get(`/api/health/series?service=${encodeURIComponent(cfg.service)}&metric=${encodeURIComponent(cfg.metric)}&limit=120`)
-        .then((s) => drawLine(canvas, s.map((p) => p.value), meta.color, meta.threshold))
-        .catch(() => {});
-    }, 5000);
+    healthTimer = setInterval(render, 5000);
   }
   if (cfg.live) startLive();
 }

@@ -49,6 +49,13 @@ def test_health_series(client):
     # 支持多指标：latency 序列应存在且为数值
     lat = client.get("/api/health/series?service=demo-api&metric=latency&limit=5").json()
     assert len(lat) >= 1 and isinstance(lat[0]["value"], (int, float))
+    # 多指标叠加视图并行拉取各序列：结构一致（均有 value/ts，数量相同）
+    import concurrent.futures
+    with concurrent.futures.ThreadPoolExecutor(3) as ex:
+        res = list(ex.map(
+            lambda m: client.get(f"/api/health/series?service=demo-api&metric={m}&limit=20").json(),
+            ["error_rate", "latency", "qps"]))
+    assert all(len(s) >= 1 and "value" in s[0] and "ts" in s[0] for s in res)
 
 
 def test_alertmanager_webhook_payload(client):
