@@ -92,3 +92,16 @@ def test_overview(client):
     r = client.get("/api/overview")
     assert r.status_code == 200
     assert "credential_count" in r.json()
+
+
+def test_overview_service_health(client):
+    client.post("/api/simulate/fault")
+    d = client.get("/api/overview").json()
+    health = {s["service"]: s for s in d["service_health"]}
+    assert "demo-api" in health
+    assert health["demo-api"]["state"] in ("healthy", "abnormal", "nodata")
+    assert "error_rate" in health["demo-api"]
+    # 故障后错误率应反映（最新采样）
+    assert health["demo-api"]["state"] == "abnormal" or (health["demo-api"]["error_rate"] or 0) >= 5
+    # 合规快照字段
+    assert "compliance_rate" in d and "compliance_violation" in d

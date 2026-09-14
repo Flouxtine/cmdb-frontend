@@ -57,40 +57,91 @@ function switchView(name) {
 document.querySelectorAll(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
 
 /* ---------------- 概览 ---------------- */
+let overviewTimer = null;
+let overviewPaused = false;
+
 async function loadOverview() {
-  const v = $("#view-overview"); v.innerHTML = '<div class="empty">加载中...</div>';
-  try {
-    const d = await get("/api/overview");
-    v.innerHTML = "";
-    const stats = el("div", "stat-grid");
-    stats.append(
-      mkStat(d.credential_count, "云账号", "ok"), mkStat(d.resource_count, "云资源", "ac"),
-      mkStat(d.cmdb_item_count, "业务服务", ""), mkStat(d.open_alert_count ?? 0, "未处理告警", (d.open_alert_count || 0) > 0 ? "hl" : ""));
-    v.appendChild(stats);
+  clearInterval(overviewTimer);
+  const v = $("#view-overview");
+  v.innerHTML = '<div class="empty">加载中...</div>';
+  overviewPaused = false;
+  const render = async () => {
+    try {
+      const [d, alerts] = await Promise.all([
+        get("/api/overview"),
+        get("/api/alerts?status=open"),
+      ]);
+      buildOverview(v, d, alerts);
+    } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+  };
+  await render();
+  overviewTimer = setInterval(() => { if (!overviewPaused) render(); }, 10000);
+}
 
-    const card = el("div", "card");
-    card.appendChild(el("h3", "", "资源类型分布"));
-    const chips = el("div", "chips");
-    (d.resource_by_type || []).forEach((x) => chips.appendChild(el("span", "chip", `${(RES_TYPES[x.resource_type] || x.resource_type)} <b>${x.n}</b>`)));
-    if (!d.resource_by_type.length) chips.appendChild(el("span", "muted", "暂无资源 —— 先添加云账号并同步"));
-    card.appendChild(chips);
-    v.appendChild(card);
+function buildOverview(v, d, alerts) {
+  v.innerHTML = "";
+  // 刷新控制
+  const top = el("div", "toolbar");
+  const pauseBtn = el("button", "btn", overviewPaused ? "▶ 恢复刷新" : "⏸ 暂停刷新(10s)");
+  pauseBtn.onclick = () => { overviewPaused = !overviewPaused; pauseBtn.textContent = overviewPaused ? "▶ 恢复刷新" : "⏸ 暂停刷新(10s)"; };
+  top.append(el("span", "muted", "运营总览 · 每 10s 自动刷新"), pauseBtn);
+  v.appendChild(top);
 
-    const acc = el("div", "card");
-    acc.appendChild(el("h3", "", "各账号资源分布"));
-    const a2 = el("div", "chips");
-    (d.resource_by_account || []).forEach((x) => a2.appendChild(el("span", "chip", `${esc(x.name || "(未命名)")} <b>${x.n}</b>`)));
-    if (!d.resource_by_account.length) a2.appendChild(el("span", "muted", "暂无账号资源"));
-    acc.appendChild(a2);
-    v.appendChild(acc);
+  // KPI
+  const stats = el("div", "stat-grid");
+  stats.append(
+    mkStat(d.credential_count, "云账号", "ok"), mkStat(d.resource_count, "云资源", "ac"),
+    mkStat(d.cmdb_item_count, "业务服务", ""), mkStat(d.open_alert_count ?? 0, "未解决告警", (d.open_alert_count || 0) > 0 ? "hl" : "ok"));
+  v.appendChild(stats);
 
-    const proj = el("div", "card");
-    proj.appendChild(el("h3", "", "业务服务（按项目）"));
-    const p2 = el("div", "chips");
-    (d.cmdb_by_project || []).forEach((x) => p2.appendChild(el("span", "chip", `${esc(x.project)} <b>${x.n}</b>`)));
-    proj.appendChild(p2);
-    v.appendChild(proj);
-  } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
+  // 服务健康
+  const svcCard = el("div", "card");
+  svcCard.appendChild(el("h3", "", "服务健康"));
+  const svcChips = el("div", "chips");
+  (d.service_health || []).forEach((s) => {
+    const st = { healthy: "ok", abnormal: "high", nodata: "low" }[s.state] || "low";
+    const stLabel = { healthy: "正常", abnormal: "异常", nodata: "无数据" }[s.state] || s.state;
+    svcChips.appendChild(el("span", "chip", `${esc(s.service)} <span class="lvl ${st}">${stLabel}</span> 错误率 <b>${s.error_rate ?? "-"}%</b> 延迟 <b>${s.latency ?? "-"}ms</b>`));
+  });
+  svcCard.appendChild(svcChips);
+  v.appendChild(svcCard);
+
+  // 合规快照
+  const compCard = el("div", "card");
+  compCard.appendChild(el("h3", "", "合规快照"));
+  const compChips = el("div", "chips");
+  compChips.append(
+    el("span", "chip", `合规率 <b>${d.compliance_rate ?? "-"}%</b>`),
+    el("span", "chip", `违规资源 <b>${d.compliance_violation ?? 0}</b>`));
+  const compBtn = el("button", "btn sm", "去整改 →");
+  compBtn.onclick = () => switchView("compliance");
+  compChips.appendChild(compBtn);
+  compCard.appendChild(compChips);
+  v.appendChild(compCard);
+
+  // 实时告警流
+  const flowCard = el("div", "card");
+  flowCard.appendChild(el("h3", "", "实时告警流（未解决）"));
+  const list = (alerts || []).slice(0, 8);
+  if (list.length) {
+    const t = el("table");
+    t.appendChild(el("thead", "", "<tr><th>级别</th><th>告警</th><th>来源</th><th>负责人</th><th>时间</th></tr>"));
+    const tb = el("tbody");
+    list.forEach((a) => {
+      const tr = el("tr");
+      tr.style.cursor = "pointer";
+      tr.title = "点击进入告警分析";
+      tr.onclick = () => switchView("alerts");
+      tr.innerHTML = `<td><span class="lvl ${a.level}">${LEVEL_LABEL[a.level] || a.level}</span></td>
+        <td>${esc(a.title)}</td><td><span class="src">${esc(SRC_LABEL[a.source] || a.source)}</span></td>
+        <td>${a.assignee ? `👤 ${esc(a.assignee)}` : '<span class="muted">未认领</span>'}</td>
+        <td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;
+      tb.appendChild(tr);
+    });
+    t.appendChild(tb);
+    flowCard.appendChild(t);
+  } else flowCard.appendChild(el("div", "muted", "暂无未解决告警 🎉"));
+  v.appendChild(flowCard);
 }
 const mkStat = (num, label, cls) => { const s = el("div", `stat ${cls || ""}`); s.append(el("div", "num", String(num)), el("div", "label", esc(label))); return s; };
 

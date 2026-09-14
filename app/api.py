@@ -822,8 +822,34 @@ def overview():
             "SELECT level, COUNT(*) n FROM alert_events WHERE status='open' GROUP BY level")]
         unlinked = conn.execute(
             "SELECT COUNT(*) FROM resources r WHERE NOT EXISTS (SELECT 1 FROM cmdb_item_resource ir WHERE ir.resource_id=r.id)").fetchone()[0]
+        # 服务健康（最新采样值 + 状态）
+        service_health = []
+        for svc in ("demo-api", config.SERVICE_NAME):
+            err = conn.execute(
+                "SELECT value FROM metric_samples WHERE service=? AND metric='error_rate' ORDER BY id DESC LIMIT 1",
+                (svc,)).fetchone()
+            lat = conn.execute(
+                "SELECT value FROM metric_samples WHERE service=? AND metric='latency' ORDER BY id DESC LIMIT 1",
+                (svc,)).fetchone()
+            err_v = err["value"] if err else None
+            lat_v = lat["value"] if lat else None
+            if err_v is None and lat_v is None:
+                state = "nodata"
+            elif (err_v or 0) >= 5 or (lat_v or 0) >= 500:
+                state = "abnormal"
+            else:
+                state = "healthy"
+            service_health.append({"service": svc, "state": state, "error_rate": err_v, "latency": lat_v})
+        # 合规快照（内联查询——避免在已持有的连接内再调用 get_conn 导致锁死锁）
+        violation_res = conn.execute(
+            "SELECT COUNT(DISTINCT resource_ref) FROM alert_events "
+            "WHERE source='compliance' AND status='open'").fetchone()[0]
+        comp_total = conn.execute("SELECT COUNT(*) FROM resources").fetchone()[0]
+        comp_rate = round((comp_total - violation_res) / comp_total * 100, 1) if comp_total else 100.0
     return {"credential_count": cred_total, "resource_count": res_total, "cmdb_item_count": item_total,
             "open_alert_count": alert_open, "alert_by_level": alert_by_level,
             "resource_by_type": by_type, "resource_by_account": by_account,
             "cmdb_by_project": by_project, "unlinked_resource_count": unlinked,
+            "service_health": service_health,
+            "compliance_rate": comp_rate, "compliance_violation": violation_res,
             "resource_types": RESOURCE_TYPES}
