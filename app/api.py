@@ -10,6 +10,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from . import alerts, ai, compliance, config
+from . import actions
 from . import database as db
 from . import metrics, prom, security
 from .providers import registry, get_provider
@@ -587,6 +588,37 @@ def compliance_remediation(body: AiExplainIn):
 def compliance_summary():
     """合规概览：资源总量/违规资源数/合规率 + 按规则、类型分布 + 违规明细"""
     return compliance.summary()
+
+
+# ---------------- 自动处置 / 自愈规则 ----------------
+@router.get("/auto-actions")
+def list_auto_actions():
+    """自愈规则列表（含启停状态）"""
+    return db.fetch_all("SELECT * FROM auto_actions ORDER BY action_key")
+
+
+@router.patch("/auto-actions/{action_key}")
+def update_auto_action(action_key: str, body: RuleIn):
+    if not db.fetch_one("SELECT action_key FROM auto_actions WHERE action_key=?", (action_key,)):
+        raise HTTPException(404, "动作不存在")
+    db.execute("UPDATE auto_actions SET enabled=? WHERE action_key=?", (1 if body.enabled else 0, action_key))
+    return {"ok": True}
+
+
+@router.get("/action-logs")
+def list_action_logs(limit: int = 50):
+    """自愈动作审计日志（最近 N 条）"""
+    limit = min(max(limit, 1), 200)
+    return db.fetch_all("SELECT * FROM action_logs ORDER BY id DESC LIMIT ?", (limit,))
+
+
+@router.post("/actions/{action_key}/run/{alert_id}")
+def run_action(action_key: str, alert_id: int):
+    """手动触发自愈动作"""
+    try:
+        return actions.run_action_manually(action_key, alert_id)
+    except ValueError as e:
+        raise HTTPException(404, str(e))
 
 
 # ---------------- 处置协作 / 指标输出 ----------------

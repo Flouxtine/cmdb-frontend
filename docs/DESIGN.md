@@ -177,3 +177,11 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
   - 内置模板：每检查项配 5 步整改（云控制台操作，见 CHECKS[].remediation）
   - LLM 增强：配了 LLM_API_KEY 时用资源+账号+模板上下文生成定制步骤（engine=llm，失败回退 template）
 - 前端：合规中心违规行「💡 修复建议」按钮 → 抽屉（引擎/违规对象/分步整改）
+
+## 9.7 自动处置 / 自愈规则（M11 补充）
+
+- `auto_actions` 表（默认关闭）+ `action_logs` 审计表
+- 内置动作：自动认领(🤖 auto-ops→in_progress)、通知推送(ALERT_WEBHOOK_URL)、自愈-模拟重启（演示，写备注+审计）
+- 触发：告警创建（webhook/内部规则/合规扫描均走 upsert → created）自动执行启用的动作
+- `GET/PATCH /api/auto-actions`、`GET /api/action-logs`、`POST /api/actions/{key}/run/{alert_id}`（手动触发）
+- 前端：告警页「⚙️ 自愈规则」抽屉（规则开关 + 最近动作审计）

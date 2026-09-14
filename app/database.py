@@ -114,6 +114,20 @@ def init_db():
                 ts TEXT DEFAULT (datetime('now','localtime'))
             );
             CREATE INDEX IF NOT EXISTS idx_metric_samples ON metric_samples(service, metric, ts);
+            CREATE TABLE IF NOT EXISTS auto_actions (
+                action_key TEXT PRIMARY KEY,
+                name TEXT NOT NULL,
+                description TEXT DEFAULT '',
+                enabled INTEGER DEFAULT 0
+            );
+            CREATE TABLE IF NOT EXISTS action_logs (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                alert_id INTEGER,
+                action_key TEXT,
+                name TEXT,
+                detail TEXT DEFAULT '',
+                created_at TEXT DEFAULT (datetime('now','localtime'))
+            );
             """
         )
         # 种子规则（幂等）：内部检测规则 + 合规基线规则（与 compliance.CHECKS 对应）
@@ -128,7 +142,16 @@ def init_db():
                 ("disk_not_encrypted", "云盘未加密", "medium"),
             ],
         )
-        # 存量库迁移：alert_events 补 resource_id / assignee / comment 列（新库建表已含，幂等）
+        # 种子自动处置动作（默认关闭，需手动开启）
+        conn.executemany(
+            "INSERT OR IGNORE INTO auto_actions(action_key, name, description, enabled) VALUES(?,?,?,0)",
+            [
+                ("auto_assign_bot", "自动认领（机器人）", "未认领告警自动分配给 🤖 auto-ops 并进入处理中", ),
+                ("notify_webhook", "告警通知推送", "告警触发时推送 ALERT_WEBHOOK_URL（钉钉/飞书/自定义）", ),
+                ("simulate_self_heal", "自愈-模拟重启服务", "演示：模拟重启故障服务并记录审计（不实际执行）", ),
+            ],
+        )
+        # 存量库轻量迁移：alert_events 补 resource_id / assignee / comment 列（新库建表已含，幂等）
         cols = [r[1] for r in conn.execute("PRAGMA table_info(alert_events)").fetchall()]
         for col, ddl in (("resource_id", "INTEGER"), ("assignee", "TEXT"), ("comment", "TEXT")):
             if col not in cols:

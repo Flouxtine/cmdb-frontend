@@ -369,7 +369,9 @@ async function loadAlerts() {
     unassignedBtn.onclick = () => { alertFilter.unassigned = alertFilter.unassigned ? 0 : 1; loadAlerts(); };
     const reportBtn = el("button", "btn", "📊 处置统计");
     reportBtn.onclick = () => showAlertReport();
-    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn);
+    const autoBtn = el("button", "btn", "⚙️ 自愈规则");
+    autoBtn.onclick = () => showAutoActions();
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn);
 
     // 处置看板：KPI + 认领人负载
     const board = el("div", "stat-grid");
@@ -723,6 +725,52 @@ async function showAlertReport() {
       (r.by_source || []).forEach((x) => chips.appendChild(el("span", "chip", `${esc(SRC_LABEL[x.source] || x.source)} <b>${x.n}</b>`)));
       body.appendChild(sec("来源分布", chips));
     }
+  } catch (e) {
+    body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
+}
+
+/* 自愈规则抽屉：规则开关 + 最近动作审计 */
+async function showAutoActions() {
+  const dlg = openDrawer("⚙️ 自愈规则（告警触发自动执行）", el("div"));
+  const body = dlg.body;
+  body.appendChild(el("div", "muted", "加载中..."));
+  try {
+    const rules = await get("/api/auto-actions");
+    const logs = await get("/api/action-logs?limit=20");
+    body.innerHTML = "";
+    const tip = el("div", "tip", "开启后，新告警创建时自动执行对应动作并写入审计日志（可手动触发）。演示：开启「自愈-模拟重启」→ 点「模拟故障发布」→ 看下方动作日志。");
+    body.appendChild(tip);
+    body.appendChild(sec("规则开关", (() => {
+      const box = el("div");
+      rules.forEach((r) => {
+        const row = el("div", "form-row");
+        row.style.justifyContent = "space-between";
+        const left = el("div", "");
+        left.append(el("div", "", `<b>${esc(r.name)}</b>`), el("div", "muted", esc(r.description || "")));
+        const sw = el("span", `switch ${r.enabled ? "on" : ""}`);
+        sw.onclick = () => {
+          patch(`/api/auto-actions/${r.action_key}`, { enabled: !r.enabled })
+            .then(() => { r.enabled = !r.enabled; sw.classList.toggle("on", r.enabled); toast("已更新"); })
+            .catch((e) => toast(e.message, true));
+        };
+        row.append(left, sw);
+        box.appendChild(row);
+      });
+      return box;
+    })()));
+
+    const logSec = el("div");
+    if (logs.length) {
+      const t = el("table");
+      t.appendChild(el("thead", "", "<tr><th>时间</th><th>动作</th><th>详情</th><th>告警</th></tr>"));
+      const tb = el("tbody");
+      logs.forEach((l) => tb.appendChild(el("tr", "", `<td class="muted">${fmtTime(l.created_at)}</td>
+        <td>🤖 ${esc(l.name)}</td><td class="muted">${esc(l.detail)}</td><td class="muted">#${l.alert_id}</td>`)));
+      t.appendChild(tb);
+      logSec.appendChild(t);
+    } else logSec.appendChild(el("div", "muted", "暂无动作日志 —— 开启规则后模拟一条告警即可看到"));
+    body.appendChild(sec("最近动作日志（审计）", logSec));
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
   }

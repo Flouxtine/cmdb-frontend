@@ -6,6 +6,7 @@
 import hashlib
 
 from . import database as db
+from .actions import run_actions_for_alert
 from .notify import send_alert_notification
 
 # 外部级别 → 内部三档
@@ -114,6 +115,9 @@ def upsert_alert(payload):
     send_alert_notification({"title": title, "level": level, "detail": detail,
                              "resource_ref": resource_ref, "source": source,
                              "status": "open", "first_at": None}, "created")
+    # 自动处置：按启用的自愈规则执行（审计见 action_logs）
+    run_actions_for_alert({"id": aid, "title": title, "level": level, "detail": detail,
+                           "resource_ref": resource_ref, "source": source, "assignee": None})
     return {"action": "created", "id": aid, "item_id": item_id, "related_deployment_id": dep_id}
 
 
