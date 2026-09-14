@@ -164,3 +164,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `GET /api/metrics`：Prometheus 文本格式，抓取前自动刷新
 - 指标：告警（`ops_alert_open_total` / 按级别 / 按来源）、资产（`ops_resource_total{type=}` / 账号 / CMDB 项）、合规违规、服务采样（错误率/延迟）
 - 对接：外部 Prometheus `scrape` 指向该 URL；前端告警页底部展示关键计数 + 对接说明
+
+## 9.5 处置统计报表（M9 补充）
+
+- `GET /api/alerts/report?days=N`（1-90，默认 7）：产生/解决/当前未解决/平均解决时长（julianday 差）
+- 按认领人工作量（含"(未认领)"分组）、按天趋势（产生/解决）、按来源分布
+- 前端：告警页「📊 处置统计」按钮 → 抽屉报表（KPI 卡 + 认领人表格 + 按天表格 + 来源 chips）

@@ -404,6 +404,63 @@ def alert_stats():
     }
 
 
+@router.get("/alerts/report")
+def alert_report(days: int = 7):
+    """处置统计报表：时间窗内产生/解决/平均解决时长 + 按认领人工作量 + 按天趋势"""
+    days = min(max(days, 1), 90)
+    with db.get_conn() as conn:
+        # 时间窗内产生与解决
+        produced = conn.execute(
+            "SELECT COUNT(*) FROM alert_events WHERE datetime(first_at) >= datetime('now','localtime',?)",
+            (f"-{days} days",)).fetchone()[0]
+        resolved = conn.execute(
+            "SELECT COUNT(*) FROM alert_events WHERE status='resolved' AND resolved_at IS NOT NULL "
+            "AND datetime(resolved_at) >= datetime('now','localtime',?)",
+            (f"-{days} days",)).fetchone()[0]
+        # 平均解决时长（小时）
+        avg_row = conn.execute(
+            "SELECT AVG((julianday(resolved_at) - julianday(first_at)) * 24) AS h FROM alert_events "
+            "WHERE status='resolved' AND resolved_at IS NOT NULL AND first_at IS NOT NULL "
+            "AND datetime(resolved_at) >= datetime('now','localtime',?)",
+            (f"-{days} days",)).fetchone()
+        avg_hours = round(avg_row["h"], 2) if avg_row and avg_row["h"] is not None else None
+        open_now = conn.execute(
+            "SELECT COUNT(*) FROM alert_events WHERE status IN ('open','in_progress')").fetchone()[0]
+        # 按认领人（时间窗内）
+        by_assignee = [dict(r) for r in conn.execute(
+            "SELECT COALESCE(NULLIF(assignee,''), '(未认领)') AS assignee, "
+            "COUNT(*) AS total, "
+            "SUM(CASE WHEN status='resolved' THEN 1 ELSE 0 END) AS resolved "
+            "FROM alert_events WHERE datetime(first_at) >= datetime('now','localtime',?) "
+            "GROUP BY COALESCE(NULLIF(assignee,''), '(未认领)') ORDER BY total DESC",
+            (f"-{days} days",))]
+        # 按天趋势（近 N 天：产生/解决）
+        by_day_produced = [dict(r) for r in conn.execute(
+            "SELECT substr(first_at,1,10) AS day, COUNT(*) AS n FROM alert_events "
+            "WHERE datetime(first_at) >= datetime('now','localtime',?) GROUP BY substr(first_at,1,10) ORDER BY day",
+            (f"-{days} days",))]
+        by_day_resolved = [dict(r) for r in conn.execute(
+            "SELECT substr(resolved_at,1,10) AS day, COUNT(*) AS n FROM alert_events "
+            "WHERE status='resolved' AND resolved_at IS NOT NULL "
+            "AND datetime(resolved_at) >= datetime('now','localtime',?) GROUP BY substr(resolved_at,1,10) ORDER BY day",
+            (f"-{days} days",))]
+        # 按来源
+        by_source = [dict(r) for r in conn.execute(
+            "SELECT source, COUNT(*) AS n FROM alert_events "
+            "WHERE datetime(first_at) >= datetime('now','localtime',?) GROUP BY source ORDER BY n DESC",
+            (f"-{days} days",))]
+    return {
+        "days": days,
+        "produced": produced,
+        "resolved": resolved,
+        "open_now": open_now,
+        "avg_resolve_hours": avg_hours,
+        "by_assignee": by_assignee,
+        "by_day": {"produced": by_day_produced, "resolved": by_day_resolved},
+        "by_source": by_source,
+    }
+
+
 @router.post("/alerts/{aid}/resolve")
 def resolve_alert(aid: int):
     db.execute("UPDATE alert_events SET status='resolved', resolved_at=datetime('now','localtime') WHERE id=? AND status='open'", (aid,))

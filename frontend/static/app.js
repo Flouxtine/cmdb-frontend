@@ -367,7 +367,9 @@ async function loadAlerts() {
     selSrc.onchange = () => { alertFilter.source = selSrc.value; loadAlerts(); };
     const unassignedBtn = el("button", "btn", `未认领${alertFilter.unassigned ? " ✓" : ""}`);
     unassignedBtn.onclick = () => { alertFilter.unassigned = alertFilter.unassigned ? 0 : 1; loadAlerts(); };
-    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn);
+    const reportBtn = el("button", "btn", "📊 处置统计");
+    reportBtn.onclick = () => showAlertReport();
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn);
 
     // 处置看板：KPI + 认领人负载
     const board = el("div", "stat-grid");
@@ -631,6 +633,68 @@ async function loadHealth() {
     }, 5000);
   }
   if (cfg.live) startLive();
+}
+
+/* 处置统计报表抽屉 */
+async function showAlertReport() {
+  const dlg = openDrawer("📊 处置统计报表", el("div"));
+  const body = dlg.body;
+  body.appendChild(el("div", "muted", "加载中..."));
+  try {
+    const r = await get("/api/alerts/report?days=7");
+    body.innerHTML = "";
+    const fmtHours = (h) => (h === null || h === undefined ? "-" : h < 1 ? `${Math.round(h * 60)} 分钟` : `${h} 小时`);
+    body.appendChild(sec("近 7 天概览", (() => {
+      const s = el("div", "stat-grid");
+      s.style.marginBottom = "0";
+      s.append(
+        mkStat(r.produced, "产生告警", "ac"),
+        mkStat(r.resolved, "已解决", "ok"),
+        mkStat(r.open_now, "当前未解决", r.open_now ? "hl" : "ok"),
+        mkStat(fmtHours(r.avg_resolve_hours), "平均解决时长", ""));
+      return s;
+    })()));
+
+    // 认领人工作量
+    const assigneeSec = el("div");
+    if ((r.by_assignee || []).length) {
+      const t = el("table");
+      t.appendChild(el("thead", "", "<tr><th>负责人</th><th>处理量</th><th>已解决</th></tr>"));
+      const tb = el("tbody");
+      (r.by_assignee || []).forEach((x) => {
+        const unassigned = x.assignee === "(未认领)";
+        tb.appendChild(el("tr", "", `<td>${unassigned ? '<span class="muted">(未认领)</span>' : `👤 ${esc(x.assignee)}`}</td><td><b>${x.total}</b></td><td>${x.resolved ?? 0}</td>`));
+      });
+      t.appendChild(tb);
+      assigneeSec.appendChild(t);
+    } else assigneeSec.appendChild(el("div", "muted", "时间窗内暂无告警"));
+    body.appendChild(sec("认领人工作量（近 7 天）", assigneeSec));
+
+    // 按天趋势
+    const daySec = el("div");
+    const daysMap = {};
+    (r.by_day.produced || []).forEach((d) => { daysMap[d.day] = { produced: d.n, resolved: 0 }; });
+    (r.by_day.resolved || []).forEach((d) => { daysMap[d.day] = daysMap[d.day] || { produced: 0, resolved: 0 }; daysMap[d.day].resolved = d.n; });
+    const dayKeys = Object.keys(daysMap).sort();
+    if (dayKeys.length) {
+      const t = el("table");
+      t.appendChild(el("thead", "", "<tr><th>日期</th><th>产生</th><th>解决</th></tr>"));
+      const tb = el("tbody");
+      dayKeys.forEach((d) => tb.appendChild(el("tr", "", `<td>${esc(d)}</td><td>${daysMap[d].produced}</td><td>${daysMap[d].resolved}</td>`)));
+      t.appendChild(tb);
+      daySec.appendChild(t);
+    } else daySec.appendChild(el("div", "muted", "近 7 天无告警记录"));
+    body.appendChild(sec("按天趋势", daySec));
+
+    // 来源分布
+    if ((r.by_source || []).length) {
+      const chips = el("div", "chips");
+      (r.by_source || []).forEach((x) => chips.appendChild(el("span", "chip", `${esc(SRC_LABEL[x.source] || x.source)} <b>${x.n}</b>`)));
+      body.appendChild(sec("来源分布", chips));
+    }
+  } catch (e) {
+    body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
+  }
 }
 
 /* ---------------- 通用 ---------------- */
