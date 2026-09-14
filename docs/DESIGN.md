@@ -232,3 +232,10 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 
 - `/api/overview` 增加 `service_health`（demo-api/opsscope 最新错误率/延迟 + 状态）与合规快照（合规率/违规资源数，内联查询避免嵌套 get_conn 死锁）
 - 前端概览页升级为运营大盘：KPI + 服务健康卡 + 合规快照 + **实时告警流（10s 轮询，暂停/恢复）**，告警流点击跳转告警页
+
+## 9.15 静默窗口 cron 重复（M19 补充）
+
+- `silences` 增 `cron` / `duration_minutes` 列；`POST /silences` 传 cron 时校验表达式（croniter，非法 400）+ duration>0 必填
+- 静默匹配：cron 记录用 croniter 计算最近一次触发 + duration 窗口（prev/next 双向判断）；一次性记录保持原逻辑
+- 前端：静默抽屉新增「重复 cron（可选）」+「cron 时长（分钟）」字段，列表显示 cron 规则
+- 依赖：+croniter

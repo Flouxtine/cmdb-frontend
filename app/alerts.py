@@ -72,19 +72,49 @@ def _service_name_of(item_id, rid):
 
 
 def is_silenced(service_or_ref=""):
-    """静默窗口检查：生效中的静默规则（全局 svc='' 无条件命中；服务级匹配目标）。
-    时间基于 SQLite localtime，窗口含端点。"""
-    with db.get_conn() as conn:
-        rows = conn.execute(
-            "SELECT service FROM silences "
-            "WHERE datetime(starts_at) <= datetime('now','localtime') "
-            "AND datetime(ends_at) >= datetime('now','localtime')").fetchall()
+    """静默窗口检查：
+    - 一次性窗口：starts_at <= now <= ends_at（全局 svc='' 无条件命中；服务级匹配目标）
+    - cron 重复窗口：cron 表达式 + duration_minutes，命中最近一次开始点起的窗口
+    时间基于 SQLite localtime。"""
+    now = db.fetch_one("SELECT datetime('now','localtime') AS n")["n"]
+    rows = db.fetch_all("SELECT service, starts_at, ends_at, cron, duration_minutes FROM silences")
     for r in rows:
-        svc = (r["service"] or "").strip()
-        if not svc:
-            return True  # 全局静默
-        if service_or_ref and (svc == service_or_ref or svc in service_or_ref or service_or_ref in svc):
+        if r.get("cron"):
+            # cron 重复窗口：判断 now 是否落在最近一次触发 + duration 内
+            if _cron_silenced(r["cron"], r["duration_minutes"] or 0, now):
+                if _matches_scope(r["service"], service_or_ref):
+                    return True
+            continue
+        if not (r["starts_at"] <= now <= r["ends_at"]):
+            continue
+        if _matches_scope(r["service"], service_or_ref):
             return True
+    return False
+
+
+def _matches_scope(svc, service_or_ref):
+    svc = (svc or "").strip()
+    if not svc:
+        return True  # 全局静默
+    return bool(service_or_ref) and (svc == service_or_ref or svc in service_or_ref or service_or_ref in svc)
+
+
+def _cron_silenced(cron_expr, duration_minutes, now_str):
+    """用 croniter 计算 now 的最近一次 cron 开始时间，判断是否在 [start, start+duration) 窗口内"""
+    try:
+        from croniter import croniter
+        import datetime as _dt
+        now = _dt.datetime.strptime(now_str, "%Y-%m-%d %H:%M:%S")
+        itr = croniter(cron_expr, now - _dt.timedelta(minutes=1))
+        prev_start = itr.get_prev(_dt.datetime)
+        if prev_start <= now < prev_start + _dt.timedelta(minutes=duration_minutes or 0):
+            return True
+        itr2 = croniter(cron_expr, now)
+        next_start = itr2.get_next(_dt.datetime)
+        if next_start <= now < next_start + _dt.timedelta(minutes=duration_minutes or 0):
+            return True
+    except Exception:
+        return False
     return False
 
 

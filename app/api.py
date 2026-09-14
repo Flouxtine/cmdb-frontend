@@ -1,6 +1,7 @@
 """M1-M2 API：云账号 / 云资源归属 / 业务服务 / 发布上报 / 告警接收与分析 / 概览"""
 from __future__ import annotations
 
+import datetime
 import json
 import uuid
 
@@ -82,6 +83,8 @@ class SilenceIn(BaseModel):
     starts_at: str
     ends_at: str
     note: str = ""
+    cron: str = ""
+    duration_minutes: int = 0
 
 
 class AlertBatchIn(BaseModel):
@@ -676,12 +679,31 @@ def list_silences():
 
 @router.post("/silences")
 def create_silence(body: SilenceIn):
+    if body.cron:
+        if body.duration_minutes <= 0:
+            raise HTTPException(400, "cron 静默需提供正数的 duration_minutes")
+        try:
+            import croniter  # noqa: F401  仅验证表达式
+        except ImportError:
+            raise HTTPException(500, "缺少 croniter 依赖")
+        # 用 croniter 校验表达式（starts_at/ends_at 存占位，窗口由 cron 计算）
+        try:
+            croniter.croniter(body.cron, datetime.datetime.now())
+        except Exception:
+            raise HTTPException(400, "非法 cron 表达式")
+        sid = uuid.uuid4().hex
+        db.execute(
+            "INSERT INTO silences(id, name, service, starts_at, ends_at, note, cron, duration_minutes) "
+            "VALUES(?,?,?,?,?,?,?,?)",
+            (sid, body.name, body.service, body.starts_at, body.ends_at, body.note,
+             body.cron, body.duration_minutes))
+        return {"id": sid, "kind": "cron"}
     if body.starts_at >= body.ends_at:
         raise HTTPException(400, "结束时间必须晚于开始时间")
     sid = uuid.uuid4().hex
     db.execute("INSERT INTO silences(id, name, service, starts_at, ends_at, note) VALUES(?,?,?,?,?,?)",
                (sid, body.name, body.service, body.starts_at, body.ends_at, body.note))
-    return {"id": sid}
+    return {"id": sid, "kind": "once"}
 
 
 @router.delete("/silences/{sid}")

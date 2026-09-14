@@ -137,6 +137,8 @@ def init_db():
                 starts_at TEXT NOT NULL,
                 ends_at TEXT NOT NULL,
                 note TEXT DEFAULT '',
+                cron TEXT DEFAULT '',
+                duration_minutes INTEGER DEFAULT 0,
                 created_at TEXT DEFAULT (datetime('now','localtime'))
             );
             """
@@ -168,6 +170,11 @@ def init_db():
                          ("escalated_at", "TEXT"), ("escalate_count", "INTEGER DEFAULT 0")):
             if col not in cols:
                 conn.execute(f"ALTER TABLE alert_events ADD COLUMN {col} {ddl}")
+        # 存量库迁移：silences 补 cron / duration_minutes 列
+        scol = [r[1] for r in conn.execute("PRAGMA table_info(silences)").fetchall()]
+        for col, ddl in (("cron", "TEXT DEFAULT ''"), ("duration_minutes", "INTEGER DEFAULT 0")):
+            if col not in scol:
+                conn.execute(f"ALTER TABLE silences ADD COLUMN {col} {ddl}")
 
 
 def fetch_all(sql, params=()):

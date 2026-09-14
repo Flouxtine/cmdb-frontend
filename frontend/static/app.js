@@ -928,13 +928,17 @@ async function showSilences() {
     const start = el("input"); start.value = nowStr;
     const end = el("input"); end.value = endStr;
     const note = el("input"); note.placeholder = "说明（可选）";
+    const cron = el("input"); cron.placeholder = "可选：定期窗口 cron，如 0 2 * * 0（每周日 02:00）";
+    const dur = el("input"); dur.type = "number"; dur.min = "1"; dur.placeholder = "cron 时长(分钟)";
     const form = el("div");
-    form.append(f("名称", name), f("作用服务", service), f("开始时间", start), f("结束时间", end), f("说明", note));
+    form.append(f("名称", name), f("作用服务", service), f("开始时间", start), f("结束时间", end),
+      f("重复 cron(可选)", cron), f("cron 时长(分钟)", dur), f("说明", note));
     const addBtn = el("button", "btn primary", "创建静默");
     addBtn.onclick = () => post("/api/silences", {
       name: name.value.trim() || "未命名静默", service: service.value,
       starts_at: start.value, ends_at: end.value, note: note.value.trim(),
-    }).then((r) => { toast("静默已创建"); dlg.close(); }).catch((e) => toast(e.message, true));
+      cron: cron.value.trim(), duration_minutes: parseInt(dur.value || "0", 10) || 0,
+    }).then((r) => { toast(r.kind === "cron" ? "定期静默已创建（cron 生效）" : "静默已创建"); dlg.close(); }).catch((e) => toast(e.message, true));
     body.appendChild(sec("新建维护窗口", form));
     body.appendChild(addBtn);
 
@@ -942,14 +946,17 @@ async function showSilences() {
     const listSec = el("div");
     if (silences.length) {
       const t = el("table");
-      t.appendChild(el("thead", "", "<tr><th>名称</th><th>范围</th><th>起止时间</th><th>状态</th><th></th></tr>"));
+      t.appendChild(el("thead", "", "<tr><th>名称</th><th>范围</th><th>规则</th><th>状态</th><th></th></tr>"));
       const tb = el("tbody");
       silences.forEach((s) => {
         const st = { active: '<span class="tag ok">生效中</span>', upcoming: '<span class="tag low">待生效</span>', expired: '<span class="tag info">已过期</span>' }[s.status] || s.status;
+        const ruleHtml = s.cron
+          ? `<span class="src">cron: ${esc(s.cron)}</span> <span class="muted">每次 ${s.duration_minutes} 分钟</span>`
+          : `<span class="muted">${esc(s.starts_at)} ~ ${esc(s.ends_at)}</span>`;
         const tr = el("tr");
         tr.innerHTML = `<td><b>${esc(s.name)}</b>${s.note ? `<div class="muted">${esc(s.note)}</div>` : ""}</td>
           <td>${s.service ? esc(s.service) : '<span class="muted">全局</span>'}</td>
-          <td class="muted">${esc(s.starts_at)} ~ ${esc(s.ends_at)}</td><td>${st}</td>`;
+          <td>${ruleHtml}</td><td>${st}</td>`;
         const td = el("td");
         const db = el("button", "btn sm danger", "删除");
         db.onclick = () => del(`/api/silences/${s.id}`).then(() => { toast("已删除"); showSilences(); });
