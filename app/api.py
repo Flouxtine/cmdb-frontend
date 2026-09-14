@@ -5,12 +5,13 @@ import json
 import uuid
 
 from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import List, Optional
 
 from . import alerts, ai, compliance, config
 from . import database as db
-from . import metrics, security
+from . import metrics, prom, security
 from .providers import registry, get_provider
 
 router = APIRouter(prefix="/api")
@@ -522,7 +523,14 @@ def compliance_summary():
     return compliance.summary()
 
 
-# ---------------- 概览 ----------------
+# ---------------- 处置协作 / 指标输出 ----------------
+@router.get("/metrics")
+def prometheus_metrics():
+    """Prometheus 文本格式指标输出（外部监控可直接抓取，如 scrape 此 URL）"""
+    body, content_type = prom.render()
+    return Response(content=body, media_type=content_type)
+
+
 @router.get("/overview")
 def overview():
     with db.get_conn() as conn:

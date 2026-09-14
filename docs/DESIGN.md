@@ -158,3 +158,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `GET /api/alerts/stats`：未解决/处理中/未认领 KPI + 按认领人/来源/级别分布（未解决+处理中口径）
 - `list_alerts` 支持 `assignee=`（按负责人）、`unassigned=1`（只看未认领）筛选
 - 前端告警页顶部处置看板：3 张 KPI 卡 + 认领人负载 chips + 「未认领」切换按钮
+
+## 9.4 Prometheus 指标暴露（M8 补充）
+
+- `GET /api/metrics`：Prometheus 文本格式，抓取前自动刷新
+- 指标：告警（`ops_alert_open_total` / 按级别 / 按来源）、资产（`ops_resource_total{type=}` / 账号 / CMDB 项）、合规违规、服务采样（错误率/延迟）
+- 对接：外部 Prometheus `scrape` 指向该 URL；前端告警页底部展示关键计数 + 对接说明

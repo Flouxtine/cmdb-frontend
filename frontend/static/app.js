@@ -432,6 +432,19 @@ async function loadAlerts() {
     });
     t.appendChild(tb);
     v.appendChild(t);
+
+    // 指标输出小结（Prometheus 格式）
+    const metricCard = el("div", "card");
+    metricCard.appendChild(el("h3", "", "指标输出（Prometheus 格式）"));
+    const metricChips = el("div", "chips");
+    metricChips.append(
+      el("span", "chip", `未解决 <b>${stats.open_count}</b>`),
+      el("span", "chip", `处理中 <b>${stats.in_progress_count}</b>`),
+      el("span", "chip", `未认领 <b>${stats.unassigned_count}</b>`));
+    (stats.by_level || []).forEach((l) => metricChips.appendChild(el("span", "chip", `${LEVEL_LABEL[l.level] || l.level} <b>${l.n}</b>`)));
+    metricCard.appendChild(metricChips);
+    metricCard.appendChild(el("div", "muted", "对接：Prometheus 配置 `scrape_configs → targets: ['<host>:8080'] → metrics_path: /api/metrics`，可采集告警/资产/合规指标。"));
+    v.appendChild(metricCard);
   } catch (e) { v.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`; }
 }
 
