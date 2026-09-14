@@ -145,3 +145,10 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `alert_events` 增 assignee / comment 列（含存量迁移）
 - `POST /alerts/{id}/assign`（认领→负责人+进入处理中）、`/comment`（处置备注）、`/status`（open/in_progress/resolved 流转）
 - 前端告警页：负责人/备注列 + 认领/备注/解决操作 + 「处理中」状态筛选与样式
+
+## 9.2 告警处置协作（M6 补充）
+
+- `POST /alerts/{id}/assign`：认领/转派负责人，状态自动进入 `in_progress`（筛选支持处理中）
+- `POST /alerts/{id}/comment`：带时间戳追加处置备注（保留历史，多轮处置留痕）
+- `alert_events` 增 `assignee` / `comment` 列（存量库自动迁移）
+- 前端告警表：负责人列 + 备注浮层提示 + 认领/备注操作；处置字段不影响告警归属 JOIN

@@ -128,15 +128,11 @@ def init_db():
                 ("disk_not_encrypted", "云盘未加密", "medium"),
             ],
         )
-        # 存量库轻量迁移：alert_events 补 resource_id 列
+        # 存量库迁移：alert_events 补 resource_id / assignee / comment 列（新库建表已含，幂等）
         cols = [r[1] for r in conn.execute("PRAGMA table_info(alert_events)").fetchall()]
-        if "resource_id" not in cols:
-            conn.execute("ALTER TABLE alert_events ADD COLUMN resource_id INTEGER")
-        # 告警认领/处置字段（M6）
-        if "assignee" not in cols:
-            conn.execute("ALTER TABLE alert_events ADD COLUMN assignee TEXT DEFAULT ''")
-        if "comment" not in cols:
-            conn.execute("ALTER TABLE alert_events ADD COLUMN comment TEXT DEFAULT ''")
+        for col, ddl in (("resource_id", "INTEGER"), ("assignee", "TEXT"), ("comment", "TEXT")):
+            if col not in cols:
+                conn.execute(f"ALTER TABLE alert_events ADD COLUMN {col} {ddl}")
 
 
 def fetch_all(sql, params=()):

@@ -394,10 +394,10 @@ async function loadAlerts() {
         act.appendChild(ab2);
         const nb = el("button", "btn sm", "备注");
         nb.onclick = () => {
-          const note = window.prompt("处置备注：", a.comment || "");
-          if (note === null) return;
+          const note = window.prompt("新增处置备注（自动带时间戳追加，保留历史）：");
+          if (note === null || !note.trim()) return;
           post(`/api/alerts/${a.id}/comment`, { comment: note.trim() })
-            .then(() => { toast("备注已更新"); loadAlerts(); }).catch((e) => toast(e.message, true));
+            .then(() => { toast("备注已追加"); loadAlerts(); }).catch((e) => toast(e.message, true));
         };
         act.appendChild(nb);
       }

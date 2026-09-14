@@ -65,6 +65,14 @@ class AiExplainIn(BaseModel):
     alert_id: int
 
 
+class AlertAssignIn(BaseModel):
+    assignee: str = Field(..., min_length=1, max_length=50)
+
+
+class AlertCommentIn(BaseModel):
+    comment: str = Field(..., min_length=1, max_length=500)
+
+
 def _check_webhook_token(request: Request):
     """Webhook 鉴权：配置了 WEBHOOK_TOKEN 则要求 X-Ops-Scope-Token 匹配"""
     if config.WEBHOOK_TOKEN and request.headers.get("X-Ops-Scope-Token") != config.WEBHOOK_TOKEN:
@@ -367,46 +375,31 @@ def resolve_alert(aid: int):
     return {"ok": True}
 
 
-class AssignIn(BaseModel):
-    assignee: str = ""
-
-
 @router.post("/alerts/{aid}/assign")
-def assign_alert(aid: int, body: AssignIn):
-    """认领告警：设置负责人 + 进入处理中状态"""
+def assign_alert(aid: int, body: AlertAssignIn):
+    """认领/转派告警：记录负责人并进入处理中状态"""
     if not db.fetch_one("SELECT id FROM alert_events WHERE id=?", (aid,)):
         raise HTTPException(404, "告警不存在")
-    db.execute("UPDATE alert_events SET assignee=?, status=?, last_at=datetime('now','localtime') WHERE id=?",
-               (body.assignee, "in_progress", aid))
+    db.execute("UPDATE alert_events SET assignee=?, status='in_progress', last_at=datetime('now','localtime') WHERE id=?",
+               (body.assignee, aid))
     return {"ok": True}
-
-
-class CommentIn(BaseModel):
-    comment: str = ""
 
 
 @router.post("/alerts/{aid}/comment")
-def comment_alert(aid: int, body: CommentIn):
-    """追加处置备注（覆盖式记录最近备注）"""
+def comment_alert(aid: int, body: AlertCommentIn):
+    """追加处置备注（合并多条备注）"""
     if not db.fetch_one("SELECT id FROM alert_events WHERE id=?", (aid,)):
         raise HTTPException(404, "告警不存在")
-    db.execute("UPDATE alert_events SET comment=?, last_at=datetime('now','localtime') WHERE id=?",
-               (body.comment, aid))
+    cur = db.fetch_one("SELECT comment FROM alert_events WHERE id=?", (aid,))
+    old_comment = (cur["comment"] or "").strip()
+    merged = f"{old_comment}\n[{service_now()} ] {body.comment}".strip() if old_comment else f"[{service_now()}] {body.comment}"
+    db.execute("UPDATE alert_events SET comment=? WHERE id=?", (merged, aid))
     return {"ok": True}
 
 
-@router.post("/alerts/{aid}/status")
-def set_alert_status(aid: int, body: CommentIn):
-    """切换处理状态：in_progress / resolved（自由流转）"""
-    if not db.fetch_one("SELECT id FROM alert_events WHERE id=?", (aid,)):
-        raise HTTPException(404, "告警不存在")
-    new_status = body.comment if body.comment in ("open", "in_progress", "resolved") else ""
-    if not new_status:
-        raise HTTPException(400, "仅支持 open/in_progress/resolved")
-    resolved_at = "datetime('now','localtime')" if new_status == "resolved" else "NULL"
-    db.execute(f"UPDATE alert_events SET status=?, resolved_at={resolved_at}, last_at=datetime('now','localtime') WHERE id=?",
-               (new_status, aid))
-    return {"ok": True}
+def service_now():
+    import datetime as _dt
+    return _dt.datetime.now().strftime("%Y-%m-%d %H:%M")
 
 
 @router.get("/rules")
