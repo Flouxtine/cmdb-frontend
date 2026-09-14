@@ -346,7 +346,9 @@ async def webhook_generic(request: Request, body: GenericWebhookIn):
 
 
 @router.get("/alerts")
-def list_alerts(level: str = "", status: str = "", source: str = "", service: str = ""):
+def list_alerts(level: str = "", status: str = "", source: str = "", service: str = "",
+                assignee: str = "", unassigned: int = 0):
+    """告警列表（处置协作筛选：assignee 按负责人、unassigned=1 只看未认领）"""
     # 过期扫描：超时未恢复的 open 告警 → expired（状态机完整性）
     alerts.expire_stale_events()
     sql = ("SELECT a.*, d.version AS deploy_version, c.name AS credential_name, i.name AS item_name "
@@ -364,9 +366,41 @@ def list_alerts(level: str = "", status: str = "", source: str = "", service: st
         sql += " AND a.source=?"; params.append(source)
     if service:
         sql += " AND (i.name=? OR r.name=?)"; params += [service, service]
+    if assignee:
+        sql += " AND a.assignee=?"; params.append(assignee)
+    if unassigned:
+        sql += " AND (a.assignee IS NULL OR a.assignee='')"
     sql += (" ORDER BY CASE a.level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, "
             "a.last_at DESC LIMIT 200")
     return db.fetch_all(sql, params)
+
+
+@router.get("/alerts/stats")
+def alert_stats():
+    """处置工作台统计：未解决/处理中/未认领 + 按认领人/来源/级别分布"""
+    open_rows = db.fetch_all("SELECT * FROM alert_events WHERE status IN ('open','in_progress')")
+    open_count = len(open_rows)
+    in_progress = sum(1 for a in open_rows if a["status"] == "in_progress")
+    unassigned = sum(1 for a in open_rows if not (a["assignee"] or "").strip())
+
+    by_assignee = {}
+    by_source = {}
+    by_level = {}
+    for a in open_rows:
+        who = (a["assignee"] or "").strip()
+        if who:
+            by_assignee[who] = by_assignee.get(who, 0) + 1
+        by_source[a["source"]] = by_source.get(a["source"], 0) + 1
+        by_level[a["level"]] = by_level.get(a["level"], 0) + 1
+
+    return {
+        "open_count": open_count,
+        "in_progress_count": in_progress,
+        "unassigned_count": unassigned,
+        "by_assignee": [{"assignee": k, "n": v} for k, v in sorted(by_assignee.items(), key=lambda x: -x[1])],
+        "by_source": [{"source": k, "n": v} for k, v in sorted(by_source.items(), key=lambda x: -x[1])],
+        "by_level": [{"level": k, "n": v} for k, v in sorted(by_level.items(), key=lambda x: -x[1])],
+    }
 
 
 @router.post("/alerts/{aid}/resolve")

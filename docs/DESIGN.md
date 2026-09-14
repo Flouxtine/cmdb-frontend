@@ -152,3 +152,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `POST /alerts/{id}/comment`：带时间戳追加处置备注（保留历史，多轮处置留痕）
 - `alert_events` 增 `assignee` / `comment` 列（存量库自动迁移）
 - 前端告警表：负责人列 + 备注浮层提示 + 认领/备注操作；处置字段不影响告警归属 JOIN
+
+## 9.3 处置工作台（M7 补充）
+
+- `GET /api/alerts/stats`：未解决/处理中/未认领 KPI + 按认领人/来源/级别分布（未解决+处理中口径）
+- `list_alerts` 支持 `assignee=`（按负责人）、`unassigned=1`（只看未认领）筛选
+- 前端告警页顶部处置看板：3 张 KPI 卡 + 认领人负载 chips + 「未认领」切换按钮

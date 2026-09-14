@@ -334,15 +334,16 @@ async function showSvcDrawer(iid) {
 }
 
 /* ---------------- 告警分析（M2）---------------- */
-const alertFilter = { level: "", status: "open", source: "" };
+const alertFilter = { level: "", status: "open", source: "", assignee: "", unassigned: 0 };
 const LEVEL_LABEL = { high: "高危", medium: "中危", low: "低危" };
-const SRC_LABEL = { alertmanager: "Alertmanager", custom: "通用Webhook", internal: "内部规则" };
+const SRC_LABEL = { alertmanager: "Alertmanager", custom: "通用Webhook", internal: "内部规则", compliance: "合规扫描" };
 
 async function loadAlerts() {
   const v = $("#view-alerts"); v.innerHTML = '<div class="empty">加载中...</div>';
   try {
     const params = new URLSearchParams(Object.entries(alertFilter).filter(([, x]) => x));
     const alerts = await get(`/api/alerts?${params}`);
+    const stats = await get("/api/alerts/stats");
     v.innerHTML = "";
     const demoBar = el("div", "tip", "🎬 演示：点「模拟外部告警」= 通用 Webhook 推一条告警（resource_ref 匹配到 CMDB 资源）；也可复制 curl 直接调 <b>POST /api/webhooks/generic</b> 或 Alertmanager 标准格式 <b>POST /api/webhooks/alertmanager</b>（配了 WEBHOOK_TOKEN 需带 X-Ops-Scope-Token）。");
     const toolbar = el("div", "toolbar");
@@ -361,11 +362,28 @@ async function loadAlerts() {
     selStatus.value = alertFilter.status;
     selStatus.onchange = () => { alertFilter.status = selStatus.value; loadAlerts(); };
     const selSrc = el("select");
-    [["", "全部来源"], ["alertmanager", "Alertmanager"], ["custom", "通用Webhook"], ["internal", "内部规则"]].forEach(([k, l]) => selSrc.appendChild(new Option(l, k)));
+    [["", "全部来源"], ["alertmanager", "Alertmanager"], ["custom", "通用Webhook"], ["internal", "内部规则"], ["compliance", "合规扫描"]].forEach(([k, l]) => selSrc.appendChild(new Option(l, k)));
     selSrc.value = alertFilter.source;
     selSrc.onchange = () => { alertFilter.source = selSrc.value; loadAlerts(); };
-    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc);
-    v.append(demoBar, toolbar);
+    const unassignedBtn = el("button", "btn", `未认领${alertFilter.unassigned ? " ✓" : ""}`);
+    unassignedBtn.onclick = () => { alertFilter.unassigned = alertFilter.unassigned ? 0 : 1; loadAlerts(); };
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn);
+
+    // 处置看板：KPI + 认领人负载
+    const board = el("div", "stat-grid");
+    board.append(
+      mkStat(stats.open_count, "未解决", stats.open_count ? "hl" : "ok"),
+      mkStat(stats.in_progress_count, "处理中", "ac"),
+      mkStat(stats.unassigned_count, "未认领", stats.unassigned_count ? "hl" : "ok"));
+    const loadCard = el("div", "card");
+    loadCard.appendChild(el("h3", "", "认领人负载（未解决/处理中按人聚合）"));
+    const chips = el("div", "chips");
+    if ((stats.by_assignee || []).length) {
+      (stats.by_assignee || []).forEach((x) => chips.appendChild(el("span", "chip", `👤 ${esc(x.assignee)} <b>${x.n}</b>`)));
+    } else chips.appendChild(el("span", "muted", "暂无认领告警 —— 认领后这里按人聚合负载"));
+    loadCard.appendChild(chips);
+
+    v.append(demoBar, board, loadCard, toolbar);
 
     const t = el("table");
     t.appendChild(el("thead", "", "<tr><th>级别</th><th>告警</th><th>来源</th><th>资源 / 业务</th><th>关联发布</th><th>状态</th><th>负责人 / 处置</th><th>最近时间</th><th>操作</th></tr>"));
