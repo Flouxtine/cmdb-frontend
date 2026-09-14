@@ -400,9 +400,10 @@ async function loadAlerts() {
       const rel = a.related_deployment_id ? `<span class="rel-tag">⚠️ ${esc(a.deploy_version || "本次发布")}</span>` : '<span class="muted">-</span>';
       const stCls = { open: "st-open", in_progress: "st-inprogress", resolved: "st-resolved", expired: "st-expired" }[a.status] || "";
       const stLabel = { open: "未解决", in_progress: "处理中", resolved: "已解决", expired: "已过期" }[a.status] || a.status;
+      const escTag = a.escalated_at ? '<span class="rel-tag" style="margin-right:4px">⚡ 已升级</span>' : "";
       const handled = `<b>${esc(a.assignee || "未认领")}</b>${a.comment ? `<div class="muted" style="max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${esc(a.comment)}">${esc(a.comment)}</div>` : ""}`;
       tr.innerHTML = `<td><span class="lvl ${a.level}">${LEVEL_LABEL[a.level] || a.level}</span></td>
-        <td><b>${esc(a.title)}</b><div class="muted">${esc(a.detail || "")}</div></td>
+        <td>${escTag}<b>${esc(a.title)}</b><div class="muted">${esc(a.detail || "")}</div></td>
         <td><span class="src">${esc(SRC_LABEL[a.source] || a.source)}</span></td>
         <td>${esc(a.item_name || a.resource_ref || "-")}${a.credential_name ? `<div class="muted">账号:${esc(a.credential_name)}</div>` : ""}</td>
         <td>${rel}</td><td class="${stCls}">${stLabel}</td><td>${handled}</td><td class="muted">${fmtTime(a.last_at || a.first_at)}</td>`;

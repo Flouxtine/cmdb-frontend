@@ -5,6 +5,7 @@ import tempfile
 
 _TMP = tempfile.mkdtemp(prefix="opsscope-test-")
 os.environ["OPS_SCOPE_DATA"] = _TMP
+os.environ["SAMPLE_INTERVAL"] = "9999"   # 测试期间禁用后台采样/升级线程的即时执行
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402

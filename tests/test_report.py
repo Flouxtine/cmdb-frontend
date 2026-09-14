@@ -39,8 +39,9 @@ def test_report_basic_stats(client):
 
 def test_report_days_filter(client):
     _insert(client, [
-        {"title": "old", "first": "datetime('now','localtime','-30 day')"},   # 30 天前 → 不在 7 天窗
-        {"title": "recent", "first": MINUS1},
+        {"title": "old", "first": "datetime('now','localtime','-31 day')"},   # 30 天窗外
+        {"title": "mid", "first": "datetime('now','localtime','-10 day')"},   # 7 天窗外、30 天内
+        {"title": "recent", "first": MINUS1},                                  # 7 天内
     ])
     assert client.get("/api/alerts/report?days=7").json()["produced"] == 1
     assert client.get("/api/alerts/report?days=30").json()["produced"] == 2

@@ -104,12 +104,14 @@ def _resolve_rule_alert(service: str, rule_key: str) -> int:
 
 
 def _loop():
+    from . import escalation
     while True:
+        time.sleep(config.SAMPLE_INTERVAL)
         try:
             run_once()
+            escalation.run_escalation_check()
         except Exception as e:
             logger.warning("采样/检测异常: %s", e)
-        time.sleep(config.SAMPLE_INTERVAL)
 
 
 def start():

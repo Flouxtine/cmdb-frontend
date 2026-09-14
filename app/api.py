@@ -12,6 +12,7 @@ from typing import List, Optional
 from . import alerts, ai, compliance, config
 from . import actions
 from . import database as db
+from . import escalation
 from . import metrics, prom, security
 from .providers import registry, get_provider
 
@@ -657,6 +658,19 @@ def run_action(action_key: str, alert_id: int):
         return actions.run_action_manually(action_key, alert_id)
     except ValueError as e:
         raise HTTPException(404, str(e))
+
+
+# ---------------- 告警升级策略 ----------------
+@router.get("/escalation/config")
+def escalation_config():
+    """升级策略（阈值/开关）"""
+    return escalation.escalation_config()
+
+
+@router.post("/escalation/check")
+def escalation_check():
+    """手动触发一次升级检查（演示/测试用）"""
+    return escalation.run_escalation_check()
 
 
 # ---------------- 处置协作 / 指标输出 ----------------

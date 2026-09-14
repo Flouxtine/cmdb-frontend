@@ -24,3 +24,5 @@ WEBHOOK_TOKEN = os.environ.get("WEBHOOK_TOKEN", "")
 ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "")
 # 采样与内部规则检测间隔（秒）
 SAMPLE_INTERVAL = float(os.environ.get("SAMPLE_INTERVAL", "10"))
+# 告警升级策略开关（长时间未解决自动升级级别）
+ESCALATION_ENABLED = os.environ.get("ESCALATION_ENABLED", "1") == "1"

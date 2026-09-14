@@ -98,7 +98,9 @@ def init_db():
                 comment TEXT DEFAULT '',
                 first_at TEXT DEFAULT (datetime('now','localtime')),
                 last_at TEXT DEFAULT (datetime('now','localtime')),
-                resolved_at TEXT
+                resolved_at TEXT,
+                escalated_at TEXT,
+                escalate_count INTEGER DEFAULT 0
             );
             CREATE TABLE IF NOT EXISTS rules (
                 rule_key TEXT PRIMARY KEY,
@@ -160,9 +162,10 @@ def init_db():
                 ("simulate_self_heal", "自愈-模拟重启服务", "演示：模拟重启故障服务并记录审计（不实际执行）", ),
             ],
         )
-        # 存量库轻量迁移：alert_events 补 resource_id / assignee / comment 列（新库建表已含，幂等）
+        # 存量库迁移：alert_events 补 resource_id / assignee / comment / escalated_at / escalate_count 列
         cols = [r[1] for r in conn.execute("PRAGMA table_info(alert_events)").fetchall()]
-        for col, ddl in (("resource_id", "INTEGER"), ("assignee", "TEXT"), ("comment", "TEXT")):
+        for col, ddl in (("resource_id", "INTEGER"), ("assignee", "TEXT"), ("comment", "TEXT"),
+                         ("escalated_at", "TEXT"), ("escalate_count", "INTEGER DEFAULT 0")):
             if col not in cols:
                 conn.execute(f"ALTER TABLE alert_events ADD COLUMN {col} {ddl}")
 

@@ -193,3 +193,12 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - 状态标签：生效中 / 待生效 / 已过期（接口计算）
 - 前端：告警页「🔕 静默」抽屉（新建窗口表单 + 当前列表 + 删除）
 - 修复：is_silenced 全局静默空入参失效 bug；conftest 清理 silences 防污染
+
+## 9.9 告警升级策略（M13 补充）
+
+- `app/escalation.py`：run_escalation_check 扫描未解决告警，按存活时长自动升级（最多两级、幂等）
+  - 阈值：high >0.5h → critical；medium >2h → high；low >4h → medium（时间基于 julianday 差值转小时）
+- 升级写 escalated_at/escalate_count + action_logs 审计 + 通知推送（critical 必推）
+- `GET /api/escalation/config`、`POST /api/escalation/check`；后台采样线程周期调用
+- 前端：告警行「⚡ 已升级」标签
+- 修复：julianday 差值单位（天→×24 小时）；测试线程首轮抢跑（_loop 先 sleep）；报表边界 flaky（-31day）
