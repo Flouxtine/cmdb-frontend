@@ -375,7 +375,16 @@ async function loadAlerts() {
     silenceBtn.onclick = () => showSilences();
     const exportBtn = el("button", "btn", "⬇️ 导出 CSV");
     exportBtn.onclick = () => { window.location.href = `/api/alerts/export.csv?${new URLSearchParams(Object.entries(alertFilter).filter(([, x]) => x))}`; };
-    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn, silenceBtn, exportBtn);
+    // 批量操作（选中告警）
+    state.selIds = new Set();
+    selInfoEl = el("span", "muted", "已选 0 项");
+    const batchResolve = el("button", "btn sm", "批量解决");
+    batchResolve.onclick = () => batchAction("resolve");
+    const batchAssign = el("button", "btn sm", "批量认领");
+    batchAssign.onclick = () => batchAction("assign");
+    const batchComment = el("button", "btn sm", "批量备注");
+    batchComment.onclick = () => batchAction("comment");
+    toolbar.append(simBtn, faultBtn, recBtn, selLevel, selStatus, selSrc, unassignedBtn, reportBtn, autoBtn, silenceBtn, exportBtn, selInfo, batchResolve, batchAssign, batchComment);
 
     // 处置看板：KPI + 认领人负载
     const board = el("div", "stat-grid");
@@ -394,11 +403,24 @@ async function loadAlerts() {
     v.append(demoBar, board, loadCard, toolbar);
 
     const t = el("table");
-    t.appendChild(el("thead", "", "<tr><th>级别</th><th>告警</th><th>来源</th><th>资源 / 业务</th><th>关联发布</th><th>状态</th><th>负责人 / 处置</th><th>最近时间</th><th>操作</th></tr>"));
+    const headRow = el("tr");
+    const headCheck = el("input"); headCheck.type = "checkbox"; headCheck.title = "全选当前页";
+    headCheck.onchange = () => {
+      alerts.forEach((a) => { if (a.status !== "resolved" && a.status !== "expired") { a._checked = headCheck.checked; a._box.checked = headCheck.checked; } });
+      refreshSel(alerts);
+    };
+    headRow.appendChild(el("td", "", "")).appendChild(headCheck);
+    headRow.innerHTML += "<th>级别</th><th>告警</th><th>来源</th><th>资源 / 业务</th><th>关联发布</th><th>状态</th><th>负责人 / 处置</th><th>最近时间</th><th>操作</th>";
+    t.appendChild(el("thead", "").appendChild(headRow));
     const tb = el("tbody");
-    if (!alerts.length) tb.innerHTML = `<tr><td colspan="9" class="empty">暂无告警 —— 点「模拟外部告警」体验接收流程</td></tr>`;
+    if (!alerts.length) tb.innerHTML = `<tr><td colspan="10" class="empty">暂无告警 —— 点「模拟外部告警」体验接收流程</td></tr>`;
     alerts.forEach((a) => {
       const tr = el("tr");
+      a._checked = false;
+      const box = el("input"); box.type = "checkbox";
+      box.onchange = () => { a._checked = box.checked; refreshSel(alerts); };
+      a._box = box;
+      tr.appendChild(el("td", "")).appendChild(box);
       const rel = a.related_deployment_id ? `<span class="rel-tag">⚠️ ${esc(a.deploy_version || "本次发布")}</span>` : '<span class="muted">-</span>';
       const stCls = { open: "st-open", in_progress: "st-inprogress", resolved: "st-resolved", expired: "st-expired" }[a.status] || "";
       const stLabel = { open: "未解决", in_progress: "处理中", resolved: "已解决", expired: "已过期" }[a.status] || a.status;
@@ -841,6 +863,31 @@ async function showSilences() {
   } catch (e) {
     body.innerHTML = `<div class="empty">加载失败：${esc(e.message)}</div>`;
   }
+}
+
+let selInfoEl = null;
+
+function refreshSel(alerts) {
+  state.selIds = new Set(alerts.filter((a) => a._checked).map((a) => a.id));
+  if (selInfoEl) selInfoEl.textContent = `已选 ${state.selIds.size} 项`;
+}
+
+function batchAction(action) {
+  const ids = [...state.selIds];
+  if (!ids.length) return toast("请先勾选告警", true);
+  const labels = { resolve: "批量解决", assign: "批量认领", comment: "批量备注" };
+  const run = (extra) => post("/api/alerts/batch", { action, ids, ...extra })
+    .then((r) => { toast(`${labels[action]}：处理 ${r.affected} 条${r.not_found ? `（${r.not_found} 条不存在）` : ""}`); loadAlerts(); loadOverview(); })
+    .catch((e) => toast(e.message, true));
+  if (action === "resolve") return run();
+  if (action === "assign") {
+    const who = window.prompt("批量认领给：");
+    if (who === null || !who.trim()) return;
+    return run({ assignee: who.trim() });
+  }
+  const note = window.prompt("批量备注内容：");
+  if (note === null || !note.trim()) return;
+  run({ comment: note.trim() });
 }
 
 /* ---------------- 通用 ---------------- */

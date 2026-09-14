@@ -215,3 +215,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - 未配置 secret → 回退 WEBHOOK_TOKEN 校验；两者均未配置 → 宽松（内网默认）
 - 端点改为读取 raw body 再解析（签名基于原始字节，篡改即不匹配）
 - 前端：告警页接入说明更新（签名优先 / token 兜底）
+
+## 9.12 告警批量操作（M16 补充）
+
+- `POST /api/alerts/batch {action: resolve|assign|comment, ids, assignee?, comment?}`
+  - 校验：action 合法 / ids 非空 / assign 需 assignee / comment 需 content；返回 affected + not_found 计数
+- 前端：告警表加复选框列 + 表头全选（排除已解决/已过期）；toolbar 显示选中数 + 批量解决/认领/备注按钮

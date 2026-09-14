@@ -84,6 +84,13 @@ class SilenceIn(BaseModel):
     note: str = ""
 
 
+class AlertBatchIn(BaseModel):
+    action: str
+    ids: List[int] = []
+    assignee: str = ""
+    comment: str = ""
+
+
 def _check_webhook_token(request: Request):
     """Webhook 鉴权：配置了 WEBHOOK_TOKEN 则要求 X-Ops-Scope-Token 匹配"""
     if config.WEBHOOK_TOKEN and request.headers.get("X-Ops-Scope-Token") != config.WEBHOOK_TOKEN:
@@ -406,6 +413,40 @@ def list_alerts(level: str = "", status: str = "", source: str = "", service: st
     sql += (" ORDER BY CASE a.level WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END, "
             "a.last_at DESC LIMIT 200")
     return db.fetch_all(sql, params)
+
+
+@router.post("/alerts/batch")
+def batch_alerts(body: AlertBatchIn):
+    """批量告警操作：resolve（解决）/ assign（认领）/ comment（备注）"""
+    if body.action not in ("resolve", "assign", "comment"):
+        raise HTTPException(400, "action 仅支持 resolve/assign/comment")
+    ids = list(dict.fromkeys(body.ids))  # 去重保序
+    if not ids:
+        raise HTTPException(400, "ids 不能为空")
+    if body.action == "assign" and not body.assignee.strip():
+        raise HTTPException(400, "批量认领需提供 assignee")
+    if body.action == "comment" and not body.comment.strip():
+        raise HTTPException(400, "批量备注需提供 comment")
+
+    with db.get_conn() as conn:
+        ph = ",".join("?" for _ in ids)
+        exist = {r["id"] for r in conn.execute(f"SELECT id FROM alert_events WHERE id IN ({ph})", ids).fetchall()}
+        if body.action == "resolve":
+            cur = conn.execute(
+                f"UPDATE alert_events SET status='resolved', resolved_at=datetime('now','localtime') "
+                f"WHERE id IN ({ph}) AND status IN ('open','in_progress')", ids)
+        elif body.action == "assign":
+            cur = conn.execute(
+                f"UPDATE alert_events SET assignee=?, status='in_progress', last_at=datetime('now','localtime') "
+                f"WHERE id IN ({ph})", [body.assignee.strip()] + ids)
+        else:
+            stamp = service_now()
+            note = f"[{stamp}] {body.comment.strip()}"
+            cur = conn.execute(
+                f"UPDATE alert_events SET comment = CASE WHEN comment IS NULL OR comment='' THEN ? "
+                f"ELSE comment || char(10) || ? END WHERE id IN ({ph})", [note, note] + ids)
+        affected = cur.rowcount
+    return {"ok": True, "affected": affected, "not_found": len(ids) - len(exist)}
 
 
 @router.get("/alerts/stats")
