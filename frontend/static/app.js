@@ -345,7 +345,7 @@ async function loadAlerts() {
     const alerts = await get(`/api/alerts?${params}`);
     const stats = await get("/api/alerts/stats");
     v.innerHTML = "";
-    const demoBar = el("div", "tip", "🎬 演示：点「模拟外部告警」= 通用 Webhook 推一条告警（resource_ref 匹配到 CMDB 资源）；也可复制 curl 直接调 <b>POST /api/webhooks/generic</b> 或 Alertmanager 标准格式 <b>POST /api/webhooks/alertmanager</b>（配了 WEBHOOK_TOKEN 需带 X-Ops-Scope-Token）。");
+    const demoBar = el("div", "tip", "🎬 演示：点「模拟外部告警」= 通用 Webhook 推一条告警（resource_ref 匹配到 CMDB 资源）；也可复制 curl 直接调 <b>POST /api/webhooks/generic</b> 或 Alertmanager 标准格式 <b>POST /api/webhooks/alertmanager</b>。安全接入：配了 <b>WEBHOOK_SECRET</b> 须带 <code>X-Ops-Scope-Signature: HMAC-SHA256(body)</code> 签名；否则走 <code>X-Ops-Scope-Token</code>（.env 配置）。");
     const toolbar = el("div", "toolbar");
     const simBtn = el("button", "btn danger", "🎬 模拟外部告警");
     simBtn.onclick = () => post("/api/demo/alert").then((r) => { toast(r.action === "created" ? "已产生告警" : r.action === "deduped" ? "同 key 告警已去重" : "已入库"); loadAlerts(); loadOverview(); }).catch((e) => toast(e.message, true));

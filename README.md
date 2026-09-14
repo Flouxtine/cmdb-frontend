@@ -50,6 +50,7 @@ scripts/       report-release.sh 发布上报
 - ✅ **告警静默**：维护/发版窗口静默匹配告警（全局或按服务），不产生不通知不自愈
 - ✅ **告警升级策略**：长时间未解决自动升级级别（high 30min→critical 等），通知 + 审计
 - ✅ **CSV 导出**：告警列表（按当前筛选）与处置统计报表一键导出（Excel 兼容）
+- ✅ **Webhook HMAC 签名**：`WEBHOOK_SECRET` 配置后强制签名校验（防伪造/防篡改），兼容 Token 模式
 
 ## License
 

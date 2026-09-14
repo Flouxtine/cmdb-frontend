@@ -208,3 +208,10 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - `GET /api/alerts/export.csv`：告警列表导出（与 /alerts 同筛选：级别/状态/来源/服务/负责人/未认领），UTF-8 BOM 兼容 Excel
 - `GET /api/alerts/report/export.csv?days=N`：处置报表导出（概览 + 按天趋势 + 认领人工作量 + 来源分布）
 - 前端：告警页「⬇️ 导出 CSV」（带当前筛选）、处置统计抽屉「导出报表 CSV」
+
+## 9.11 Webhook HMAC 签名校验（M15 补充）
+
+- `WEBHOOK_SECRET`（.env）：配置后 /webhooks/* 强制校验 `X-Ops-Scope-Signature: HMAC-SHA256(raw body)`（hmac.compare_digest 防时序攻击），防伪造/防篡改
+- 未配置 secret → 回退 WEBHOOK_TOKEN 校验；两者均未配置 → 宽松（内网默认）
+- 端点改为读取 raw body 再解析（签名基于原始字节，篡改即不匹配）
+- 前端：告警页接入说明更新（签名优先 / token 兜底）

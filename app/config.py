@@ -19,6 +19,9 @@ LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()] or ["*"]
 # Webhook 鉴权令牌（M2 告警接收使用；留空则不校验）
 WEBHOOK_TOKEN = os.environ.get("WEBHOOK_TOKEN", "")
+# Webhook HMAC 签名密钥：配置后外部系统须用 HMAC-SHA256(body) 签名请求头
+# X-Ops-Scope-Signature=<hex> 接入（比 Token 更安全：防伪造/防篡改）；未配置则回退 Token 校验
+WEBHOOK_SECRET = os.environ.get("WEBHOOK_SECRET", "")
 
 # 告警通知 Webhook（钉钉/飞书/自定义，POST JSON）；留空不推送
 ALERT_WEBHOOK_URL = os.environ.get("ALERT_WEBHOOK_URL", "")

@@ -327,10 +327,29 @@ def create_deployment(body: DeploymentIn):
 
 
 # ---------------- 告警接收（M2）----------------
-@router.post("/webhooks/alertmanager")
-async def webhook_alertmanager(request: Request, body: dict = Body(...)):
-    """Prometheus Alertmanager 标准 webhook 格式接入"""
+def _verify_webhook(request: Request, raw_body: bytes):
+    """Webhook 鉴权：
+    1) 配置了 WEBHOOK_SECRET → 强制 HMAC-SHA256 签名（X-Ops-Scope-Signature=<hex>），防伪造/防篡改
+    2) 否则回退 WEBHOOK_TOKEN 校验（兼容旧接入）"""
+    if config.WEBHOOK_SECRET:
+        sig = request.headers.get("X-Ops-Scope-Signature", "")
+        if not sig:
+            raise HTTPException(401, "缺少签名头 X-Ops-Scope-Signature")
+        import hashlib
+        import hmac as _hmac
+        expected = _hmac.new(config.WEBHOOK_SECRET.encode(), raw_body, hashlib.sha256).hexdigest()
+        if not _hmac.compare_digest(sig.strip().lower(), expected):
+            raise HTTPException(401, "签名校验失败")
+        return
     _check_webhook_token(request)
+
+
+@router.post("/webhooks/alertmanager")
+async def webhook_alertmanager(request: Request):
+    """Prometheus Alertmanager 标准 webhook 格式接入（支持 HMAC 签名/Token 鉴权）"""
+    raw = await request.body()
+    _verify_webhook(request, raw)
+    body = json.loads(raw)
     results = []
     for a in body.get("alerts", []):
         labels = a.get("labels") or {}
@@ -350,9 +369,12 @@ async def webhook_alertmanager(request: Request, body: dict = Body(...)):
 
 
 @router.post("/webhooks/generic")
-async def webhook_generic(request: Request, body: GenericWebhookIn):
-    """通用 Webhook：任意系统 POST {title, level, resource_ref, detail, status, source}"""
-    _check_webhook_token(request)
+async def webhook_generic(request: Request):
+    """通用 Webhook：任意系统 POST {title, level, resource_ref, detail, status, source}（支持签名/Token）"""
+    raw = await request.body()
+    _verify_webhook(request, raw)
+    data = json.loads(raw)
+    body = GenericWebhookIn(**data)
     return alerts.upsert_alert(body.model_dump())
 
 
