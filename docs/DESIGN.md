@@ -239,3 +239,12 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
 - 静默匹配：cron 记录用 croniter 计算最近一次触发 + duration 窗口（prev/next 双向判断）；一次性记录保持原逻辑
 - 前端：静默抽屉新增「重复 cron（可选）」+「cron 时长（分钟）」字段，列表显示 cron 规则
 - 依赖：+croniter
+
+## 9.16 健康故障模式识别（M20 补充）
+
+- `GET /api/health/insight?service=`：分析最近采样窗口
+  - 多指标共振（错误率+延迟同时超标 → 疑似服务级故障 high）
+  - 单指标异常（错误率突增 high / 延迟超标 medium）
+  - 流量骤变（最新 QPS 相对窗口均值偏差>50%）
+  - 输出 findings + 处置建议 tips
+- 前端：健康页提示条（正常绿 / 异常红 + 建议），与曲线/告警联动

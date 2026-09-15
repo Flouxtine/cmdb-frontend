@@ -60,13 +60,67 @@ def _sample_once():
                      "(SELECT id FROM metric_samples ORDER BY id DESC LIMIT 5000)")
 
 
-def _recent_avg(service: str, metric: str):
+def analyze_health(service="demo-api"):
+    """健康模式分析：识别单指标异常 / 多指标共振（疑似服务级故障）/ 流量骤变"""
+    errs = _recent_values(service, "error_rate")
+    lats = _recent_values(service, "latency")
+    qps_list = _recent_values(service, "qps")
+
+    findings = []
+    avg_err = _avg(errs)
+    avg_lat = _avg(lats)
+
+    err_high = avg_err is not None and avg_err >= ERROR_THRESHOLD
+    lat_high = avg_lat is not None and avg_lat >= LATENCY_THRESHOLD
+
+    if err_high and lat_high:
+        findings.append({"type": "resonance", "level": "high",
+                         "message": "疑似服务级故障：错误率与延迟同时超标（多指标共振）"})
+    elif err_high:
+        findings.append({"type": "error_rate", "level": "high",
+                         "message": f"错误率突增（均值 {avg_err:.1f}% ≥ {ERROR_THRESHOLD:.0f}%）"})
+    elif lat_high:
+        findings.append({"type": "latency", "level": "medium",
+                         "message": f"延迟超标（均值 {avg_lat:.0f}ms ≥ {LATENCY_THRESHOLD:.0f}ms）"})
+
+    # 流量骤变：最新 QPS 相对窗口均值偏差 >50%
+    if qps_list and len(qps_list) >= 3:
+        base = sum(qps_list[1:]) / (len(qps_list) - 1)   # 除最新外的均值
+        latest = qps_list[0]                              # 最新（列表按 id DESC）
+        if base > 0 and abs(latest - base) / base > 0.5:
+            direction = "激增" if latest > base else "骤降"
+            findings.append({"type": "traffic", "level": "medium",
+                             "message": f"流量{direction}（最新 {latest:.0f} QPS，窗口均值 {base:.0f}）"})
+
+    state = "abnormal" if findings else "healthy"
+    tips = []
+    for f in findings:
+        if f["type"] == "resonance":
+            tips.append("建议进入「告警分析」查看相关告警并触发 AI 排障；确认是否由最近发布引起。")
+        elif f["type"] in ("error_rate", "latency"):
+            tips.append("对比「服务健康」单指标曲线与最近发布记录，必要时回滚或扩容。")
+        elif f["type"] == "traffic":
+            tips.append("确认是否有活动/爬虫等流量来源，评估限流或扩容。")
+    if not findings:
+        tips.append("指标平稳，无异常模式。")
+
+    return {"service": service, "state": state, "findings": findings, "tips": tips}
+
+
+def _recent_values(service, metric, n=WINDOW):
     rows = database.fetch_all(
         "SELECT value FROM metric_samples WHERE service=? AND metric=? ORDER BY id DESC LIMIT ?",
-        (service, metric, WINDOW))
-    if not rows:
-        return None
-    return sum(r["value"] for r in rows) / len(rows)
+        (service, metric, n))
+    return [r["value"] for r in rows]
+
+
+def _avg(vals):
+    return sum(vals) / len(vals) if vals else None
+
+
+def _recent_avg(service: str, metric: str):
+    vals = _recent_values(service, metric, WINDOW)
+    return _avg(vals)
 
 
 def run_once():

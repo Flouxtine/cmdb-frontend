@@ -756,6 +756,22 @@ async function loadHealth() {
   canvas.style.width = "100%";
   card.append(legend, canvas);
   v.appendChild(card);
+  const insightBox = el("div");   // 故障模式提示条
+  v.appendChild(insightBox);
+
+  async function renderInsight() {
+    try {
+      const ins = await get(`/api/health/insight?service=${encodeURIComponent(cfg.service)}`);
+      if (!ins.findings || !ins.findings.length) {
+        insightBox.innerHTML = `<div class="tip" style="background:#f0f9eb;border-color:#e1f3d8;color:#67c23a">✅ 指标平稳，无异常模式。</div>`;
+        return;
+      }
+      const items = ins.findings.map((f) => `<div style="color:${f.level === "high" ? "#f56c6c" : "#e6a23c"}">⚠️ ${esc(f.message)}</div>`).join("");
+      const tips = ins.tips.map((t) => `<div class="muted">💡 ${esc(t)}</div>`).join("");
+      insightBox.innerHTML = `<div class="tip" style="background:${ins.state === "abnormal" ? "#fef0f0" : "#fef7ef"};border-color:#fde2e2;color:#c45656">${items}${tips}</div>`;
+    } catch (e) { /* 忽略 insight 失败，不阻塞图表 */ }
+  }
+  renderInsight();
 
   function updateLegend(singleMeta, multiValues) {
     if (cfg.mode === "multi") {

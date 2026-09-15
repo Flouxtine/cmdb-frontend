@@ -620,6 +620,12 @@ def simulate_recover():
     return {"ok": True, "message": "已恢复，相关内部告警将收敛", **summary}
 
 
+@router.get("/health/insight")
+def health_insight(service: str = "demo-api"):
+    """健康模式分析：单指标异常 / 多指标共振（疑似服务级故障）/ 流量骤变"""
+    return metrics.analyze_health(service)
+
+
 @router.get("/health/series")
 def health_series(service: str, metric: str = "error_rate", limit: int = 120):
     """服务指标时间序列（内部规则检测数据，供前端绘图）"""
