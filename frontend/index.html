@@ -11,19 +11,26 @@
   <aside class="sidebar">
     <div class="brand">OpsScope <span class="brand-cn">观云台</span></div>
     <nav>
-      <a class="nav-item active" data-view="overview">📊 概览</a>
-      <a class="nav-item" data-view="credentials">🔑 云账号</a>
-      <a class="nav-item" data-view="resources">🗂️ 云资源 CMDB</a>
-      <a class="nav-item" data-view="services">🧩 业务服务</a>
-      <a class="nav-item" data-view="alerts">🚨 告警分析</a>
-      <a class="nav-item" data-view="compliance">🛡️ 合规中心</a>
-      <a class="nav-item" data-view="health">💓 服务健康</a>
+      <a class="nav-item active" data-view="overview" data-i18n="nav.overview">📊 概览</a>
+      <a class="nav-item" data-view="credentials" data-i18n="nav.credentials">🔑 云账号</a>
+      <a class="nav-item" data-view="resources" data-i18n="nav.resources">🗂️ 云资源 CMDB</a>
+      <a class="nav-item" data-view="services" data-i18n="nav.services">🧩 业务服务</a>
+      <a class="nav-item" data-view="alerts" data-i18n="nav.alerts">🚨 告警分析</a>
+      <a class="nav-item" data-view="compliance" data-i18n="nav.compliance">🛡️ 合规中心</a>
+      <a class="nav-item" data-view="health" data-i18n="nav.health">💓 服务健康</a>
     </nav>
-    <div class="sidebar-foot">OpsScope · AIOps 平台</div>
+    <div class="sidebar-foot">OpsScope · AIOps Platform</div>
   </aside>
   <main class="content">
-    <header class="topbar"><h1 id="page-title">概览</h1>
-      <div class="topbar-actions"><button class="btn" onclick="switchView(state.view)">🔄 刷新</button></div>
+    <header class="topbar"><h1 id="page-title" data-i18n="nav.overview">概览</h1>
+      <div class="topbar-actions">
+        <select id="lang-select" class="lang-select" title="语言 / Language">
+          <option value="zh">简</option>
+          <option value="tw">繁</option>
+          <option value="en">En</option>
+        </select>
+        <button class="btn" onclick="switchView(state.view)">🔄 <span data-i18n="common.refresh">刷新</span></button>
+      </div>
     </header>
     <section id="view-overview" class="view active"></section>
     <section id="view-credentials" class="view"></section>

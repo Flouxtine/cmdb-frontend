@@ -15,6 +15,27 @@ LLM_API_KEY = os.environ.get("LLM_API_KEY", "")
 LLM_BASE_URL = os.environ.get("LLM_BASE_URL", "https://api.deepseek.com/v1")
 LLM_MODEL = os.environ.get("LLM_MODEL", "deepseek-chat")
 
+
+def _parse_llm_providers():
+    """LLM 提供方列表（AI 排障 failover）：
+    1) LLM_PROVIDERS 环境变量（JSON 数组）：[{"name","base_url","api_key","model"}, ...]
+    2) 回退：单模型配置 LLM_API_KEY / LLM_BASE_URL / LLM_MODEL"""
+    import json
+    raw = os.environ.get("LLM_PROVIDERS", "")
+    if raw:
+        try:
+            providers = json.loads(raw)
+            if isinstance(providers, list) and providers and all("base_url" in p and "api_key" in p and "model" in p for p in providers):
+                return providers
+        except Exception:
+            pass
+    if LLM_API_KEY:
+        return [{"name": "default", "base_url": LLM_BASE_URL, "api_key": LLM_API_KEY, "model": LLM_MODEL}]
+    return []
+
+
+LLM_PROVIDERS = _parse_llm_providers()
+
 # 安全：CORS 白名单（逗号分隔，默认 * 仅适合内网/本地）
 CORS_ORIGINS = [o.strip() for o in os.environ.get("CORS_ORIGINS", "*").split(",") if o.strip()] or ["*"]
 # Webhook 鉴权令牌（M2 告警接收使用；留空则不校验）

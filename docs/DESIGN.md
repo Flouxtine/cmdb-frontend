@@ -248,3 +248,9 @@ Provider 抽象：`providers/base.py` → demo/aliyun 实现 → registry 注册
   - 流量骤变（最新 QPS 相对窗口均值偏差>50%）
   - 输出 findings + 处置建议 tips
 - 前端：健康页提示条（正常绿 / 异常红 + 建议），与曲线/告警联动
+
+## 9.17 三连发（M21）：AI 多模型源 / 一键部署 / 多语言
+
+- AI 多模型源：`LLM_PROVIDERS`（JSON 数组）配置多个 OpenAI 兼容提供方，AI 排障依次尝试（failover，第一个失败自动切换下一个）；未配置回退单模型配置
+- install.sh：一键部署（检测 docker/compose → 生成 .env → 拉镜像/--build 构建 → 启动 → 健康检查 → 输出地址）
+- 多语言 UI：前端 i18n 框架（zh/tw/en 字典 + localStorage 记忆 + 顶栏切换），首批覆盖导航/标题/概览 KPI/健康状态/级别/告警状态（其余回退中文，架构就位可逐页迁移）

@@ -1,4 +1,65 @@
-/* OpsScope M1 前端 */
+/* OpsScope 前端 */
+const I18N = {
+  zh: {
+    "nav.overview": "概览", "nav.credentials": "云账号", "nav.resources": "云资源 CMDB",
+    "nav.services": "业务服务", "nav.alerts": "告警分析", "nav.compliance": "合规中心", "nav.health": "服务健康",
+    "common.refresh": "刷新", "common.search": "查询", "common.detail": "详情", "common.edit": "编辑",
+    "common.delete": "删除", "common.resolve": "解决", "common.close": "关闭",
+    "kpi.accounts": "云账号", "kpi.resources": "云资源", "kpi.services": "业务服务", "kpi.open_alerts": "未解决告警",
+    "status.healthy": "正常", "status.abnormal": "异常", "status.nodata": "无数据",
+    "level.high": "高危", "level.medium": "中危", "level.low": "低危",
+    "astate.open": "未解决", "astate.in_progress": "处理中", "astate.resolved": "已解决", "astate.expired": "已过期",
+  },
+  tw: {
+    "nav.overview": "概覽", "nav.credentials": "雲帳號", "nav.resources": "雲資源 CMDB",
+    "nav.services": "業務服務", "nav.alerts": "告警分析", "nav.compliance": "合規中心", "nav.health": "服務健康",
+    "common.refresh": "重新整理", "common.search": "查詢", "common.detail": "詳情", "common.edit": "編輯",
+    "common.delete": "刪除", "common.resolve": "解決", "common.close": "關閉",
+    "kpi.accounts": "雲帳號", "kpi.resources": "雲資源", "kpi.services": "業務服務", "kpi.open_alerts": "未解決告警",
+    "status.healthy": "正常", "status.abnormal": "異常", "status.nodata": "無數據",
+    "level.high": "高危", "level.medium": "中危", "level.low": "低危",
+    "astate.open": "未解決", "astate.in_progress": "處理中", "astate.resolved": "已解決", "astate.expired": "已過期",
+  },
+  en: {
+    "nav.overview": "Overview", "nav.credentials": "Cloud Accounts", "nav.resources": "Cloud CMDB",
+    "nav.services": "Services", "nav.alerts": "Alerts", "nav.compliance": "Compliance", "nav.health": "Health",
+    "common.refresh": "Refresh", "common.search": "Search", "common.detail": "Detail", "common.edit": "Edit",
+    "common.delete": "Delete", "common.resolve": "Resolve", "common.close": "Close",
+    "kpi.accounts": "Accounts", "kpi.resources": "Resources", "kpi.services": "Services", "kpi.open_alerts": "Open Alerts",
+    "status.healthy": "Healthy", "status.abnormal": "Abnormal", "status.nodata": "No Data",
+    "level.high": "High", "level.medium": "Medium", "level.low": "Low",
+    "astate.open": "Open", "astate.in_progress": "In Progress", "astate.resolved": "Resolved", "astate.expired": "Expired",
+  },
+};
+let lang = localStorage.getItem("opsscope_lang") || "zh";
+function t(key, fallback) {
+  const v = (I18N[lang] && I18N[lang][key]) || (I18N.zh && I18N.zh[key]);
+  return v || fallback || key;
+}
+function applyLang() {
+  document.querySelectorAll("[data-i18n]").forEach((e2) => {
+    const k = e2.dataset.i18n;
+    const emoji = e2.textContent.match(/^\S+\s/);
+    e2.textContent = (emoji ? emoji[0] : "") + t(k);
+  });
+  const sel = document.getElementById("lang-select");
+  if (sel) sel.value = lang;
+}
+function setLang(l) {
+  lang = l;
+  localStorage.setItem("opsscope_lang", l);
+  applyLang();
+  switchView(state.view);   // 重渲染当前页（KPI 等使用 t 的部分）
+}
+document.addEventListener("DOMContentLoaded", () => {
+  const sel = document.getElementById("lang-select");
+  if (sel) {
+    sel.value = lang;
+    sel.onchange = () => setLang(sel.value);
+  }
+  applyLang();
+});
+
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, c, h) => { const e = document.createElement(t); if (c) e.className = c; if (h !== undefined) e.innerHTML = h; return e; };
 const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]));
@@ -50,8 +111,8 @@ function switchView(name) {
   state.view = name;
   document.querySelectorAll(".nav-item").forEach((n) => n.classList.toggle("active", n.dataset.view === name));
   document.querySelectorAll(".view").forEach((v) => v.classList.toggle("active", v.id === `view-${name}`));
-  const T = { overview: "概览", credentials: "云账号", resources: "云资源 CMDB", services: "业务服务", alerts: "告警分析", compliance: "合规中心", health: "服务健康" };
-  $("#page-title").textContent = T[name];
+  const T = { overview: "nav.overview", credentials: "nav.credentials", resources: "nav.resources", services: "nav.services", alerts: "nav.alerts", compliance: "nav.compliance", health: "nav.health" };
+  $("#page-title").textContent = t(T[name]);
   ({ overview: loadOverview, credentials: loadCredentials, resources: loadResources, services: loadServices, alerts: loadAlerts, compliance: loadCompliance, health: loadHealth })[name]();
 }
 document.querySelectorAll(".nav-item").forEach((n) => n.addEventListener("click", () => switchView(n.dataset.view)));
@@ -90,8 +151,8 @@ function buildOverview(v, d, alerts) {
   // KPI
   const stats = el("div", "stat-grid");
   stats.append(
-    mkStat(d.credential_count, "云账号", "ok"), mkStat(d.resource_count, "云资源", "ac"),
-    mkStat(d.cmdb_item_count, "业务服务", ""), mkStat(d.open_alert_count ?? 0, "未解决告警", (d.open_alert_count || 0) > 0 ? "hl" : "ok"));
+    mkStat(d.credential_count, t("kpi.accounts"), "ok"), mkStat(d.resource_count, t("kpi.resources"), "ac"),
+    mkStat(d.cmdb_item_count, t("kpi.services"), ""), mkStat(d.open_alert_count ?? 0, t("kpi.open_alerts"), (d.open_alert_count || 0) > 0 ? "hl" : "ok"));
   v.appendChild(stats);
 
   // 服务健康
@@ -100,7 +161,7 @@ function buildOverview(v, d, alerts) {
   const svcChips = el("div", "chips");
   (d.service_health || []).forEach((s) => {
     const st = { healthy: "ok", abnormal: "high", nodata: "low" }[s.state] || "low";
-    const stLabel = { healthy: "正常", abnormal: "异常", nodata: "无数据" }[s.state] || s.state;
+    const stLabel = { healthy: t("status.healthy"), abnormal: t("status.abnormal"), nodata: t("status.nodata") }[s.state] || s.state;
     svcChips.appendChild(el("span", "chip", `${esc(s.service)} <span class="lvl ${st}">${stLabel}</span> 错误率 <b>${s.error_rate ?? "-"}%</b> 延迟 <b>${s.latency ?? "-"}ms</b>`));
   });
   svcCard.appendChild(svcChips);

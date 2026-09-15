@@ -60,16 +60,18 @@ async def explain_alert(alert_id: int) -> dict:
     context = build_context(alert)
     fallback = heuristic_analysis(alert)
 
-    if config.LLM_API_KEY:
+    if config.LLM_PROVIDERS:
         try:
             return await _ask_llm(alert, context)
         except Exception as e:
-            return {"engine": "llm-fallback", "model": config.LLM_MODEL, "alert": alert,
-                    "context": context, "analysis": f"LLM 调用失败（{e}），已回退内置规则分析。\n\n{fallback}"}
+            return {"engine": "llm-fallback", "model": config.LLM_PROVIDERS[0].get("model", ""),
+                    "alert": alert, "context": context,
+                    "analysis": f"LLM 调用失败（{e}），已回退内置规则分析。\n\n{fallback}"}
     return {"engine": "heuristic", "alert": alert, "context": context, "analysis": fallback}
 
 
 async def _ask_llm(alert: dict, context: str) -> dict:
+    """按 LLM_PROVIDERS 依次尝试（failover），全部失败则抛异常由上层回退"""
     prompt = (
         "你是一名资深 SRE。基于以下告警与上下文，用中文输出：\n"
         "1) 最可能的原因（结合'疑似关联发布'的部署时间与告警时间，判断是否由该发布导致）\n"
@@ -77,15 +79,29 @@ async def _ask_llm(alert: dict, context: str) -> dict:
         f"告警标题: {alert['title']}（级别:{alert['level']}）\n"
         f"告警详情: {alert.get('detail') or '-'}\n----\n{context}"
     )
+    last_err = None
+    for provider in config.LLM_PROVIDERS:
+        try:
+            content = await _chat(provider, prompt)
+            return {"engine": "llm", "provider": provider.get("name", "default"),
+                    "model": provider.get("model", ""), "alert": alert,
+                    "context": context, "analysis": content}
+        except Exception as e:
+            last_err = e
+            continue
+    raise RuntimeError(f"全部 LLM 提供方失败: {last_err}")
+
+
+async def _chat(provider: dict, prompt: str) -> str:
+    """单提供方 chat 调用，返回内容文本"""
     async with httpx.AsyncClient(timeout=40) as client:
         resp = await client.post(
-            f"{config.LLM_BASE_URL.rstrip('/')}/chat/completions",
-            headers={"Authorization": f"Bearer {config.LLM_API_KEY}"},
-            json={"model": config.LLM_MODEL,
+            f"{provider['base_url'].rstrip('/')}/chat/completions",
+            headers={"Authorization": f"Bearer {provider['api_key']}"},
+            json={"model": provider["model"],
                   "messages": [{"role": "user", "content": prompt}],
                   "temperature": 0.2, "max_tokens": 800},
         )
         resp.raise_for_status()
         data = resp.json()
-    return {"engine": "llm", "model": config.LLM_MODEL, "alert": alert,
-            "context": context, "analysis": data["choices"][0]["message"]["content"]}
+    return data["choices"][0]["message"]["content"]
