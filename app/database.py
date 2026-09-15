@@ -116,6 +116,11 @@ def init_db():
                 ts TEXT DEFAULT (datetime('now','localtime'))
             );
             CREATE INDEX IF NOT EXISTS idx_metric_samples ON metric_samples(service, metric, ts);
+            -- 告警表高频筛选/去重索引（列表按 status+level+source、upsert 按 dedup_key、统计按 status）
+            CREATE INDEX IF NOT EXISTS idx_alerts_status ON alert_events(status);
+            CREATE INDEX IF NOT EXISTS idx_alerts_level ON alert_events(level);
+            CREATE INDEX IF NOT EXISTS idx_alerts_source ON alert_events(source);
+            CREATE INDEX IF NOT EXISTS idx_alerts_dedup ON alert_events(dedup_key);
             CREATE TABLE IF NOT EXISTS auto_actions (
                 action_key TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
