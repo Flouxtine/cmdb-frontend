@@ -1026,7 +1026,7 @@ async function showSilences() {
       t.appendChild(el("thead", "", "<tr><th>名称</th><th>范围</th><th>规则</th><th>状态</th><th></th></tr>"));
       const tb = el("tbody");
       silences.forEach((s) => {
-        const st = { active: '<span class="tag ok">生效中</span>', upcoming: '<span class="tag low">待生效</span>', expired: '<span class="tag info">已过期</span>' }[s.status] || s.status;
+        const st = { active: '<span class="tag ok">生效中</span>', scheduled: '<span class="tag info">定期</span>', upcoming: '<span class="tag low">待生效</span>', expired: '<span class="tag low">已过期</span>' }[s.status] || s.status;
         const ruleHtml = s.cron
           ? `<span class="src">cron: ${esc(s.cron)}</span> <span class="muted">每次 ${s.duration_minutes} 分钟</span>`
           : `<span class="muted">${esc(s.starts_at)} ~ ${esc(s.ends_at)}</span>`;

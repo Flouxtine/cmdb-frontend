@@ -5,7 +5,7 @@ import datetime
 import json
 import uuid
 
-from fastapi import APIRouter, Body, HTTPException, Request
+from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
 from typing import List, Optional
@@ -674,10 +674,13 @@ def compliance_summary():
 # ---------------- 告警静默 / 维护窗口 ----------------
 @router.get("/silences")
 def list_silences():
-    """静默规则列表（带生效状态）"""
+    """静默规则列表（带生效状态：cron 记录为 scheduled，一次性记录按时间算）"""
     rows = db.fetch_all("SELECT * FROM silences ORDER BY starts_at DESC")
     now = db.fetch_one("SELECT datetime('now','localtime') AS n")["n"]
     for r in rows:
+        if r.get("cron"):
+            r["status"] = "scheduled"   # 定期静默（由 cron 控制窗口）
+            continue
         r["status"] = "active" if r["starts_at"] <= now <= r["ends_at"] else (
             "upcoming" if r["starts_at"] > now else "expired")
     return rows

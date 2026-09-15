@@ -58,6 +58,15 @@ def test_once_silence_still_works(client):
     assert resp.json()["action"] == "silenced"
 
 
+def test_cron_silence_status_scheduled(client):
+    """cron 静默记录状态应为 scheduled（而非用占位时间算 expired）"""
+    client.post("/api/silences", json={
+        "name": "定期", "service": "", "starts_at": "2026-01-01 00:00", "ends_at": "2026-01-01 01:00",
+        "cron": "* * * * *", "duration_minutes": 30})
+    rows = client.get("/api/silences").json()
+    assert rows[0]["status"] == "scheduled"
+
+
 def test_cron_service_scoped(client):
     cid = create_demo_cred(client)
     client.post(f"/api/credentials/{cid}/sync")
